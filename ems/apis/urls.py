@@ -36,6 +36,9 @@ router.register('clientOverseasAddress', ClientOverseasAddressViewSet),
 router.register('clientNominee', ClientNomineeViewSet),
 router.register('clientMedicalInsurance', ClientMedicalInsuranceViewSet),
 router.register('clientTermInsurance', ClientTermInsuranceViewSet),
+router.register('clientUploadFile', ClientUploadFileViewSet),
+router.register('clientBank', ClientBankViewSet),
+router.register('clientTax', ClientTaxViewSet),
 router.register('task', TaskViewSet),
 
 

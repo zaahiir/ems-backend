@@ -159,9 +159,9 @@ class GstEntryModel(models.Model):
     gstAmcAbbreviation = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="gstAmcAbbreviation", null=True, blank=True)
     gstTotalValue = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     gstTaxableValue = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    gstIgst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    gstSgst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    gstGgst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    gstIGst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    gstSGst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    gstCGst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -291,7 +291,7 @@ class ClientModel(models.Model):
     clientCountryOfBirth = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="clientCountryOfBirth", null=True, blank=True)
     clientPlaceOfBirth = models.CharField(max_length=500, null=True, blank=True)
     clientCitizenship = models.CharField(max_length=500, null=True, blank=True)
-    clientResidencialStatus = models.CharField(max_length=500, null=True, blank=True)
+    clientResidentialStatus = models.CharField(max_length=500, null=True, blank=True)
     clientOccupation = models.CharField(max_length=500, null=True, blank=True)
     clientAnnualIncome = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     clientPoliticallyExposed = models.ForeignKey(PoliticallyExposedPersonModel, on_delete=models.CASCADE, related_name="clientPoliticallyExposed", null=True, blank=True)
@@ -424,6 +424,79 @@ class ClientTermInsuranceModel(models.Model):
     clientTermInsurancePolicyTerm = models.CharField(max_length=500, null=True, blank=True)
     clientTermInsurancePolicyMaturityAmount = models.CharField(max_length=500, null=True, blank=True)
     clientTermInsurancePolicyPaymentPerInstallment = models.CharField(max_length=500, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class ClientUploadFileModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    clientUploadFileId = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="clientUploadFileId", null=True, blank=True)
+    clientPaasPortSizePhoto = models.FileField(upload_to="clientPaasPortSizePhoto/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientPanCardPhoto = models.FileField(upload_to="clientPanCardPhoto/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientAadharCard = models.FileField(upload_to="clientAadharCard/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientDrivingLicense = models.FileField(upload_to="clientDrivingLicense/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientVoterIDFrontImage = models.FileField(upload_to="clientVoterIDFrontImage/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientVoterIDBackImage = models.FileField(upload_to="clientVoterIDBackImage/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientPassportFrontImage = models.FileField(upload_to="clientPassportFrontImage/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientPassportBackImage = models.FileField(upload_to="clientPassportBackImage/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientForeignAddressProof = models.FileField(upload_to="clientForeignAddressProof/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientForeignTaxIdentificationProof = models.FileField(upload_to="clientForeignTaxIdentificationProof/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientCancelledChequeCopy = models.FileField(upload_to="clientCancelledChequeCopy/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientBankAccountStatementOrPassbook = models.FileField(upload_to="clientBankAccountStatementOrPassbook/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientChildrenBirthCertificate = models.FileField(upload_to="clientChildrenBirthCertificate/", null=True, blank=True,
+                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class ClientBankModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    clientBankId = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="clientBankId", null=True, blank=True)
+    clientBankName = models.ForeignKey(BankNameModel, on_delete=models.CASCADE, related_name="clientBankName", null=True, blank=True)
+    clientBankAccountType = models.CharField(max_length=500, null=True, blank=True)
+    clientBankAccountNo = models.CharField(max_length=500, null=True, blank=True)
+    clientBankIfsc = models.CharField(max_length=500, null=True, blank=True)
+    clientBankMicr = models.CharField(max_length=500, null=True, blank=True)
+    clientBankAddress = models.CharField(max_length=500, null=True, blank=True)
+    clientBankBranch = models.CharField(max_length=500, null=True, blank=True)
+    clientBankCity = models.CharField(max_length=500, null=True, blank=True)
+    clientBankPincode = models.IntegerField(max_length=6, null=True, blank=True)
+    # clientPrimaryAccount = models.IntegerField(max_length=6, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class ClientTaxModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    clientTaxId = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="clientTaxId", null=True, blank=True)
+    clientTaxIdDetail = models.CharField(max_length=500, null=True, blank=True)
+    clientTaxIdNo = models.CharField(max_length=500, null=True, blank=True)
+    clientTaxCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="clientTaxCountry", null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class ClientPowerOfAttorneyModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    clientPowerOfAttorneyId = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="clientPowerOfAttorneyId", null=True, blank=True)
+    clientPowerOfAttorneyName = models.CharField(max_length=500, null=True, blank=True)
+    clientPowerOfAttorneyPanNo = models.CharField(max_length=500, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)

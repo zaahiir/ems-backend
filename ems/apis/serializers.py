@@ -194,6 +194,30 @@ class ClientTermInsuranceModelSerializers(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ClientUploadFileModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientUploadFileModel
+        fields = '__all__'
+
+
+class ClientBankModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientBankModel
+        fields = '__all__'
+
+
+class ClientTaxModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientTaxModel
+        fields = '__all__'
+
+
+class ClientPowerOfAttorneyModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientPowerOfAttorneyModel
+        fields = '__all__'
+
+
 class TaskModelSerializers(serializers.ModelSerializer):
     class Meta:
         model = TaskModel

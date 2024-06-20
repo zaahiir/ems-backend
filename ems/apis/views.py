@@ -1320,6 +1320,170 @@ class ClientTermInsuranceViewSet(viewsets.ModelViewSet):
         return Response(response)
 
 
+class ClientUploadFileViewSet(viewsets.ModelViewSet):
+    queryset = ClientUploadFileModel.objects.filter(hideStatus=0)
+    serializer_class = ClientUploadFileModelSerializers
+
+    @action(detail=True, methods=['GET'])
+    def listing(self, request, pk=None):
+        if request.headers['token'] != "":
+            if pk == "0":
+                serializer = ClientUploadFileModelSerializers(ClientUploadFileModel.objects.filter(hideStatus=0).order_by('-id'),
+                                                      many=True)
+            else:
+                serializer = ClientUploadFileModelSerializers(ClientUploadFileModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
+                                                      many=True)
+            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+        else:
+            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['POST'])
+    def processing(self, request, pk=None):
+        if request.headers['token'] != "":
+            if pk == "0":
+                serializer = ClientUploadFileModelSerializers(data=request.data)
+            else:
+                serializer = ClientUploadFileModelSerializers(instance=ClientUploadFileModel.objects.get(id=pk), data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                response = {'code': 1, 'message': "Done Successfully"}
+            else:
+                response = {'code': 0, 'message': "Unable to Process Request"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def deletion(self, request, pk=None):
+        ClientUploadFileModel.objects.filter(id=pk).update(hideStatus='1')
+        response = {'code': 1, 'message': "Done Successfully"}
+        return Response(response)
+
+
+class ClientBankViewSet(viewsets.ModelViewSet):
+    queryset = ClientBankModel.objects.filter(hideStatus=0)
+    serializer_class = ClientBankModelSerializers
+
+    @action(detail=True, methods=['GET'])
+    def listing(self, request, pk=None):
+        if request.headers['token'] != "":
+            if pk == "0":
+                serializer = ClientBankModelSerializers(ClientBankModel.objects.filter(hideStatus=0).order_by('-id'),
+                                                      many=True)
+            else:
+                serializer = ClientBankModelSerializers(ClientBankModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
+                                                      many=True)
+            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+        else:
+            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['POST'])
+    def processing(self, request, pk=None):
+        if request.headers['token'] != "":
+            if pk == "0":
+                serializer = ClientBankModelSerializers(data=request.data)
+            else:
+                serializer = ClientBankModelSerializers(instance=ClientBankModel.objects.get(id=pk), data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                response = {'code': 1, 'message': "Done Successfully"}
+            else:
+                response = {'code': 0, 'message': "Unable to Process Request"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def deletion(self, request, pk=None):
+        ClientBankModel.objects.filter(id=pk).update(hideStatus='1')
+        response = {'code': 1, 'message': "Done Successfully"}
+        return Response(response)
+
+
+class ClientTaxViewSet(viewsets.ModelViewSet):
+    queryset = ClientTaxModel.objects.filter(hideStatus=0)
+    serializer_class = ClientTaxModelSerializers
+
+    @action(detail=True, methods=['GET'])
+    def listing(self, request, pk=None):
+        if request.headers['token'] != "":
+            if pk == "0":
+                serializer = ClientTaxModelSerializers(ClientTaxModel.objects.filter(hideStatus=0).order_by('-id'),
+                                                      many=True)
+            else:
+                serializer = ClientTaxModelSerializers(ClientTaxModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
+                                                      many=True)
+            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+        else:
+            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['POST'])
+    def processing(self, request, pk=None):
+        if request.headers['token'] != "":
+            if pk == "0":
+                serializer = ClientTaxModelSerializers(data=request.data)
+            else:
+                serializer = ClientTaxModelSerializers(instance=ClientTaxModel.objects.get(id=pk), data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                response = {'code': 1, 'message': "Done Successfully"}
+            else:
+                response = {'code': 0, 'message': "Unable to Process Request"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def deletion(self, request, pk=None):
+        ClientTaxModel.objects.filter(id=pk).update(hideStatus='1')
+        response = {'code': 1, 'message': "Done Successfully"}
+        return Response(response)
+
+
+class ClientPowerOfAttorneyViewSet(viewsets.ModelViewSet):
+    queryset = ClientPowerOfAttorneyModel.objects.filter(hideStatus=0)
+    serializer_class = ClientPowerOfAttorneyModelSerializers
+
+    @action(detail=True, methods=['GET'])
+    def listing(self, request, pk=None):
+        if request.headers['token'] != "":
+            if pk == "0":
+                serializer = ClientPowerOfAttorneyModelSerializers(ClientPowerOfAttorneyModel.objects.filter(hideStatus=0).order_by('-id'),
+                                                      many=True)
+            else:
+                serializer = ClientPowerOfAttorneyModelSerializers(ClientPowerOfAttorneyModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
+                                                      many=True)
+            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+        else:
+            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['POST'])
+    def processing(self, request, pk=None):
+        if request.headers['token'] != "":
+            if pk == "0":
+                serializer = ClientPowerOfAttorneyModelSerializers(data=request.data)
+            else:
+                serializer = ClientPowerOfAttorneyModelSerializers(instance=ClientPowerOfAttorneyModel.objects.get(id=pk), data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                response = {'code': 1, 'message': "Done Successfully"}
+            else:
+                response = {'code': 0, 'message': "Unable to Process Request"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def deletion(self, request, pk=None):
+        ClientPowerOfAttorneyModel.objects.filter(id=pk).update(hideStatus='1')
+        response = {'code': 1, 'message': "Done Successfully"}
+        return Response(response)
+
+
 class TaskViewSet(viewsets.ModelViewSet):
     queryset = TaskModel.objects.filter(hideStatus=0)
     serializer_class = TaskModelSerializers
