@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django_countries.serializers import CountryFieldMixin
 from .models import *
 
 
@@ -8,62 +9,55 @@ class UserTypeModelSerializers(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class CountryModelSerializers(serializers.ModelSerializer):
-    class Meta:
-        model = CountryModel
-        fields = '__all__'
-
-
 class StateModelSerializers(serializers.ModelSerializer):
-    country = CountryModelSerializers()
     class Meta:
         model = StateModel
         fields = '__all__'
 
 
-# class GenderModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = GenderModel
-#         fields = '__all__'
-#
-#
-# class MaritalStatusModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = MaritalStatusModel
-#         fields = '__all__'
-#
-#
-# class PoliticallyExposedPersonModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = PoliticallyExposedPersonModel
-#         fields = '__all__'
-#
-#
-# class BankNameModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = BankNameModel
-#         fields = '__all__'
-#
-#
-# class GuardianRelationshipModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = GuardianRelationshipModel
-#         fields = '__all__'
-#
-#
-# class DefaultAccountModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = DefaultAccountModel
-#         fields = '__all__'
-#
-#
+class GenderModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = GenderModel
+        fields = '__all__'
+
+
+class MaritalStatusModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = MaritalStatusModel
+        fields = '__all__'
+
+
+class PoliticallyExposedPersonModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = PoliticallyExposedPersonModel
+        fields = '__all__'
+
+
+class BankNameModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = BankNameModel
+        fields = '__all__'
+
+
+class GuardianRelationshipModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = GuardianRelationshipModel
+        fields = '__all__'
+
+
+class DefaultAccountModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = DefaultAccountModel
+        fields = '__all__'
+
+
 class ArnEntryModelSerializers(serializers.ModelSerializer):
     class Meta:
         model = ArnEntryModel
         fields = '__all__'
 
 
-class AmcEntryModelSerializers(serializers.ModelSerializer):
+class AmcEntryModelSerializers(CountryFieldMixin, serializers.ModelSerializer):
     class Meta:
         model = AmcEntryModel
         fields = '__all__'
@@ -133,14 +127,20 @@ class MarketingModelSerializers(serializers.ModelSerializer):
     class Meta:
         model = MarketingModel
         fields = '__all__'
-#
-#
-# class EmployeeModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = EmployeeModel
-#         fields = '__all__'
-#
-#
+
+
+class TaskModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = TaskModel
+        fields = '__all__'
+
+
+class EmployeeModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = EmployeeModel
+        fields = '__all__'
+
+
 # class ClientModelSerializers(serializers.ModelSerializer):
 #     class Meta:
 #         model = ClientModel
@@ -224,9 +224,3 @@ class MarketingModelSerializers(serializers.ModelSerializer):
 #         model = ClientPowerOfAttorneyModel
 #         fields = '__all__'
 #
-#
-# class TaskModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = TaskModel
-#         fields = '__all__'
-
