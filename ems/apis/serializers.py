@@ -141,86 +141,86 @@ class EmployeeModelSerializers(serializers.ModelSerializer):
         fields = '__all__'
 
 
-# class ClientModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientModel
-#         fields = '__all__'
-#
-#
-# class ClientFamilyDetailModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientFamilyDetailModel
-#         fields = '__all__'
-#
-#
-# class ClientChildrenDetailModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientChildrenDetailModel
-#         fields = '__all__'
-#
-#
-# class ClientPresentAddressModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientPresentAddressModel
-#         fields = '__all__'
-#
-#
-# class ClientPermanentAddressModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientPermanentAddressModel
-#         fields = '__all__'
-#
-#
-# class ClientOfficeAddressModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientOfficeAddressModel
-#         fields = '__all__'
-#
-#
-# class ClientOverseasAddressModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientOverseasAddressModel
-#         fields = '__all__'
-#
-#
-# class ClientNomineeModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientNomineeModel
-#         fields = '__all__'
-#
-#
-# class ClientMedicalInsuranceModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientMedicalInsuranceModel
-#         fields = '__all__'
-#
-#
-# class ClientTermInsuranceModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientTermInsuranceModel
-#         fields = '__all__'
-#
-#
-# class ClientUploadFileModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientUploadFileModel
-#         fields = '__all__'
-#
-#
-# class ClientBankModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientBankModel
-#         fields = '__all__'
-#
-#
-# class ClientTaxModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientTaxModel
-#         fields = '__all__'
-#
-#
-# class ClientPowerOfAttorneyModelSerializers(serializers.ModelSerializer):
-#     class Meta:
-#         model = ClientPowerOfAttorneyModel
-#         fields = '__all__'
-#
+class ClientModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientModel
+        fields = '__all__'
+
+
+class ClientFamilyDetailModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientFamilyDetailModel
+        fields = '__all__'
+
+
+class ClientChildrenDetailModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientChildrenDetailModel
+        fields = '__all__'
+
+
+class ClientPresentAddressModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientPresentAddressModel
+        fields = '__all__'
+
+
+class ClientPermanentAddressModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientPermanentAddressModel
+        fields = '__all__'
+
+
+class ClientOfficeAddressModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientOfficeAddressModel
+        fields = '__all__'
+
+
+class ClientOverseasAddressModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientOverseasAddressModel
+        fields = '__all__'
+
+
+class ClientNomineeModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientNomineeModel
+        fields = '__all__'
+
+
+class ClientMedicalInsuranceModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientMedicalInsuranceModel
+        fields = '__all__'
+
+
+class ClientTermInsuranceModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientTermInsuranceModel
+        fields = '__all__'
+
+
+class ClientUploadFileModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientUploadFileModel
+        fields = '__all__'
+
+
+class ClientBankModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientBankModel
+        fields = '__all__'
+
+
+class ClientTaxModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientTaxModel
+        fields = '__all__'
+
+
+class ClientPowerOfAttorneyModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientPowerOfAttorneyModel
+        fields = '__all__'
+
