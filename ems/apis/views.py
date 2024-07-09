@@ -6,8 +6,11 @@ from django.db import transaction
 from datetime import datetime, date, timedelta
 from django.core.files.base import ContentFile
 import base64
+import logging
 from .serializers import *
 from .models import *
+
+logger = logging.getLogger(__name__)
 
 
 # Create your views here.
@@ -1070,8 +1073,7 @@ class ClientViewSet(viewsets.ModelViewSet):
                             {'code': 0, 'message': "Invalid family data", 'errors': family_serializer.errors})
 
                     # Process children
-                    children_data = request.data.get('childJson', [])
-                    # First, get all existing children for this client
+                    children_data = request.data.get('childrenJson', [])
                     existing_children = ClientChildrenDetailModel.objects.filter(clientChildrenId=client_instance)
                     existing_children_ids = set(existing_children.values_list('id', flat=True))
 
@@ -1103,22 +1105,23 @@ class ClientViewSet(viewsets.ModelViewSet):
                     # Process addresses
                     addresses_types = [
                         ('presentAddressJson', ClientPresentAddressModelSerializers, 'clientPresentAddressId'),
-                        ('permanentAddressJson', ClientPermanentAddressModelSerializers,
-                         'clientPermanentAddressId'),
+                        ('permanentAddressJson', ClientPermanentAddressModelSerializers, 'clientPermanentAddressId'),
                         ('officeAddressJson', ClientOfficeAddressModelSerializers, 'clientOfficeAddressId'),
-                        ('overseasAddressJson', ClientOverseasAddressModelSerializers,
-                         'clientOverseasAddressId'),
+                        ('overseasAddressJson', ClientOverseasAddressModelSerializers, 'clientOverseasAddressId'),
                     ]
                     for address_key, serializer_class, client_field in addresses_types:
                         address_data = request.data.get(address_key, {})
-                        address_instance, created = serializer_class.Meta.model.objects.get_or_create(
-                            **{client_field: client_instance})
-                        address_serializer = serializer_class(instance=address_instance, data=address_data)
-                        if address_serializer.is_valid():
-                            address_serializer.save(**{client_field: client_instance})
-                        else:
-                            return Response({'code': 0, 'message': f"Invalid {address_key} data",
-                                             'errors': address_serializer.errors})
+                        logger.debug(f"Processing {address_key}: {address_data}")
+                        if address_data:
+                            address_instance, created = serializer_class.Meta.model.objects.get_or_create(
+                                **{client_field: client_instance})
+                            address_serializer = serializer_class(instance=address_instance, data=address_data)
+                            if address_serializer.is_valid():
+                                address_serializer.save(**{client_field: client_instance})
+                            else:
+                                logger.error(f"Invalid {address_key} data: {address_serializer.errors}")
+                                return Response({'code': 0, 'message': f"Invalid {address_key} data",
+                                                 'errors': address_serializer.errors})
 
                     # Process nominees
                     nominee_data = request.data.get('nomineeJson', [])
@@ -1133,45 +1136,41 @@ class ClientViewSet(viewsets.ModelViewSet):
 
                     # Process insurance policies
                     insurance_types = [
-                        ('insuranceJson', ClientMedicalInsuranceModelSerializers, 'clientMedicalInsuranceId'),
+                        ('insuranceJson', ClientInsuranceModelSerializers, 'clientInsuranceId'),
                         ('medicalInsuranceJson', ClientMedicalInsuranceModelSerializers, 'clientMedicalInsuranceId'),
                         ('termInsuranceJson', ClientTermInsuranceModelSerializers, 'clientTermInsuranceId'),
                     ]
                     for insurance_key, serializer_class, client_field in insurance_types:
                         insurance_data = request.data.get(insurance_key, [])
+
+                        # Delete existing records
                         serializer_class.Meta.model.objects.filter(**{client_field: client_instance}).delete()
+
+                        # Create new records
                         for policy in insurance_data:
+                            policy[client_field] = client_instance.id
                             policy_serializer = serializer_class(data=policy)
                             if policy_serializer.is_valid():
-                                policy_serializer.save(**{client_field: client_instance})
+                                policy_serializer.save()
                             else:
                                 return Response({'code': 0, 'message': f"Invalid {insurance_key} data",
                                                  'errors': policy_serializer.errors})
 
                     # Process file uploads
                     upload_files_data = request.data.get('uploadFilesJson', {})
+                    # Always create or get the file instance
+                    file_instance, created = ClientUploadFileModel.objects.get_or_create(
+                        clientUploadFileId=client_instance)
                     if upload_files_data:
-                        file_instance, created = ClientUploadFileModel.objects.get_or_create(client=client_instance)
-                        file_serializer = ClientUploadFileModelSerializers(instance=file_instance,
-                                                                           data=upload_files_data)
-                        if file_serializer.is_valid():
-                            file_instance = file_serializer.save(client=client_instance)
-                            file_fields = [
-                                'clientPaasPortSizePhoto', 'clientPanCardPhoto', 'clientAadharCard',
-                                'clientDrivingLicense', 'clientVoterIDFrontImage', 'clientVoterIDBackImage',
-                                'clientPassportFrontImage', 'clientPassportBackImage',
-                                'clientForeignAddressProof', 'clientForeignTaxIdentificationProof',
-                                'clientCancelledChequeCopy', 'clientBankAccountStatementOrPassbook',
-                                'clientChildrenBirthCertificate'
-                            ]
-                            for field in file_fields:
-                                if field in upload_files_data and upload_files_data[field]:
-                                    file_data = ContentFile(base64.b64decode(upload_files_data[field]),
-                                                            name=f"{field}.pdf")
-                                    getattr(file_instance, field).save(f"{field}.pdf", file_data, save=True)
-                        else:
-                            return Response(
-                                {'code': 0, 'message': "Invalid file data", 'errors': file_serializer.errors})
+                        for field_name, base64_data in upload_files_data.items():
+                            if base64_data:
+                                # Process and save the file
+                                format, imgstr = base64_data.split(';base64,')
+                                ext = format.split('/')[-1]
+                                data = ContentFile(base64.b64decode(imgstr), name=f'{field_name}.{ext}')
+                                setattr(file_instance, field_name, data)
+                    # Save the instance even if no files were uploaded
+                    file_instance.save()
 
                     # Process bank details
                     bank_data = request.data.get('bankJson', [])
@@ -1212,8 +1211,36 @@ class ClientViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientModel.objects.filter(id=pk).update(hideStatus='1')
-        return Response({'code': 1, 'message': "Done Successfully"})
+        try:
+            with transaction.atomic():
+                client = ClientModel.objects.get(id=pk)
+
+                # Update hideStatus for the main client
+                client.hideStatus = '1'
+                client.save()
+
+                # Update hideStatus for related models
+                # Note: You'll need to add the hideStatus field to these models if it doesn't exist
+                ClientFamilyDetailModel.objects.filter(clientFamilyDetailId=client).update(hideStatus='1')
+                ClientChildrenDetailModel.objects.filter(clientChildrenId=client).update(hideStatus='1')
+                ClientPresentAddressModel.objects.filter(clientPresentAddressId=client).update(hideStatus='1')
+                ClientPermanentAddressModel.objects.filter(clientPermanentAddressId=client).update(hideStatus='1')
+                ClientOfficeAddressModel.objects.filter(clientOfficeAddressId=client).update(hideStatus='1')
+                ClientOverseasAddressModel.objects.filter(clientOverseasAddressId=client).update(hideStatus='1')
+                ClientNomineeModel.objects.filter(clientGuardianId=client).update(hideStatus='1')
+                ClientInsuranceModel.objects.filter(clientInsuranceId=client).update(hideStatus='1')
+                ClientMedicalInsuranceModel.objects.filter(clientMedicalInsuranceId=client).update(hideStatus='1')
+                ClientTermInsuranceModel.objects.filter(clientTermInsuranceId=client).update(hideStatus='1')
+                ClientUploadFileModel.objects.filter(clientUploadFileId=client).update(hideStatus='1')
+                ClientBankModel.objects.filter(clientBankId=client).update(hideStatus='1')
+                ClientTaxModel.objects.filter(clientTaxId=client).update(hideStatus='1')
+                ClientPowerOfAttorneyModel.objects.filter(clientPowerOfAttorneyId=client).update(hideStatus='1')
+
+            return Response({'code': 1, 'message': "Client and all related data hidden successfully"})
+        except ClientModel.DoesNotExist:
+            return Response({'code': 0, 'message': "Client not found"}, status=404)
+        except Exception as e:
+            return Response({'code': 0, 'message': f"An error occurred: {str(e)}"}, status=500)
 
 
 class ClientFamilyDetailViewSet(viewsets.ModelViewSet):

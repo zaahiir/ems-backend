@@ -189,6 +189,12 @@ class ClientNomineeModelSerializers(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ClientInsuranceModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientInsuranceModel
+        fields = '__all__'
+
+
 class ClientMedicalInsuranceModelSerializers(serializers.ModelSerializer):
     class Meta:
         model = ClientMedicalInsuranceModel
