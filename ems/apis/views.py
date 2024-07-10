@@ -1,8 +1,12 @@
+import traceback
+from django.http import JsonResponse
 from django_countries import countries
-from rest_framework import viewsets
-from rest_framework.decorators import action, api_view
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
+from django.core.serializers.json import DjangoJSONEncoder
+from django_countries.fields import Country
 from datetime import datetime, date, timedelta
 from django.core.files.base import ContentFile
 import base64
@@ -11,6 +15,12 @@ from .serializers import *
 from .models import *
 
 logger = logging.getLogger(__name__)
+
+class CustomJSONEncoder(DjangoJSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Country):
+            return str(obj)
+        return super().default(obj)
 
 
 # Create your views here.
@@ -1040,7 +1050,84 @@ class ClientViewSet(viewsets.ModelViewSet):
             response = {'code': 1, 'data': serializer.data, 'message': "All Retrieved"}
         else:
             response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+        return JsonResponse(response, encoder=CustomJSONEncoder)
+
+
+    @action(detail=True, methods=['GET'])
+    def listing_client(self, request, pk=None):
+        if request.headers.get('token'):
+            try:
+                client = ClientModelSerializers(ClientModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
+                                                many=True)
+                client_family = ClientFamilyDetailModelSerializers(
+                    ClientFamilyDetailModel.objects.filter(hideStatus=0, clientFamilyDetailId=pk).order_by('-id'),
+                    many=True)
+                client_children = ClientChildrenDetailModelSerializers(
+                    ClientChildrenDetailModel.objects.filter(hideStatus=0, clientChildrenId=pk).order_by('-id'),
+                    many=True)
+                client_present_address = ClientPresentAddressModelSerializers(
+                    ClientPresentAddressModel.objects.filter(hideStatus=0, clientPresentAddressId=pk).order_by('-id'),
+                    many=True)
+                client_permanent_address = ClientPermanentAddressModelSerializers(
+                    ClientPermanentAddressModel.objects.filter(hideStatus=0, clientPermanentAddressId=pk).order_by(
+                        '-id'), many=True)
+                client_office_address = ClientOfficeAddressModelSerializers(
+                    ClientOfficeAddressModel.objects.filter(hideStatus=0, clientOfficeAddressId=pk).order_by('-id'),
+                    many=True)
+                client_overseas_address = ClientOverseasAddressModelSerializers(
+                    ClientOverseasAddressModel.objects.filter(hideStatus=0, clientOverseasAddressId=pk).order_by('-id'),
+                    many=True)
+                client_nominee = ClientNomineeModelSerializers(
+                    ClientNomineeModel.objects.filter(hideStatus=0, clientGuardianId=pk).order_by('-id'), many=True)
+                client_insurance = ClientInsuranceModelSerializers(
+                    ClientInsuranceModel.objects.filter(hideStatus=0, clientInsuranceId=pk).order_by('-id'), many=True)
+                client_medical_insurance = ClientMedicalInsuranceModelSerializers(
+                    ClientMedicalInsuranceModel.objects.filter(hideStatus=0, clientMedicalInsuranceId=pk).order_by(
+                        '-id'), many=True)
+                client_term_insurance = ClientTermInsuranceModelSerializers(
+                    ClientTermInsuranceModel.objects.filter(hideStatus=0, clientTermInsuranceId=pk).order_by('-id'),
+                    many=True)
+                client_upload_files = ClientUploadFileModelSerializers(
+                    ClientUploadFileModel.objects.filter(hideStatus=0, clientUploadFileId=pk).order_by('-id'),
+                    many=True)
+                client_bank = ClientBankModelSerializers(
+                    ClientBankModel.objects.filter(hideStatus=0, clientBankId=pk).order_by('-id'), many=True)
+                client_tax = ClientTaxModelSerializers(
+                    ClientTaxModel.objects.filter(hideStatus=0, clientTaxId=pk).order_by('-id'), many=True)
+                client_attorney = ClientPowerOfAttorneyModelSerializers(
+                    ClientPowerOfAttorneyModel.objects.filter(hideStatus=0, clientPowerOfAttorneyId=pk).order_by('-id'),
+                    many=True)
+
+                combined_serializer = {
+                    "client": client.data,
+                    "family": client_family.data,
+                    "children": client_children.data,
+                    "present_address": client_present_address.data,
+                    "permanent_address": client_permanent_address.data,
+                    "office_address": client_office_address.data,
+                    "overseas_address": client_overseas_address.data,
+                    "nominee": client_nominee.data,
+                    "insurance": client_insurance.data,
+                    "medical_insurance": client_medical_insurance.data,
+                    "term_insurance": client_term_insurance.data,
+                    "upload_files": client_upload_files.data,
+                    "bank": client_bank.data,
+                    "tax": client_tax.data,
+                    "attorney": client_attorney.data,
+                }
+                return JsonResponse({'code': 1, 'data': combined_serializer, 'message': "All Retrieved"},
+                                    encoder=CustomJSONEncoder)
+            except Exception as e:
+                error_message = str(e)
+                stack_trace = traceback.format_exc()
+                return Response({
+                    'code': 0,
+                    'message': "An error occurred while retrieving client data",
+                    'error': error_message,
+                    'stack_trace': stack_trace
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            return Response({'code': 0, 'data': [], 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
 
     @action(detail=True, methods=['POST'])
     @transaction.atomic
@@ -1162,13 +1249,24 @@ class ClientViewSet(viewsets.ModelViewSet):
                     file_instance, created = ClientUploadFileModel.objects.get_or_create(
                         clientUploadFileId=client_instance)
                     if upload_files_data:
-                        for field_name, base64_data in upload_files_data.items():
-                            if base64_data:
-                                # Process and save the file
-                                format, imgstr = base64_data.split(';base64,')
-                                ext = format.split('/')[-1]
-                                data = ContentFile(base64.b64decode(imgstr), name=f'{field_name}.{ext}')
-                                setattr(file_instance, field_name, data)
+                        for field_name, file_data in upload_files_data.items():
+                            if file_data:
+                                if isinstance(file_data, str) and file_data.startswith('data:'):
+                                    # Handle base64 encoded data
+                                    format, imgstr = file_data.split(';base64,')
+                                    ext = format.split('/')[-1]
+                                    data = ContentFile(base64.b64decode(imgstr), name=f'{field_name}.{ext}')
+                                elif isinstance(file_data, dict) and 'name' in file_data and 'content' in file_data:
+                                    # Handle dictionary with name and content
+                                    ext = file_data['name'].split('.')[-1]
+                                    data = ContentFile(base64.b64decode(file_data['content']), name=file_data['name'])
+                                else:
+                                    # Unsupported format
+                                    logger.warning(f"Unexpected file data format for {field_name}: {type(file_data)}")
+                                    continue
+
+                            setattr(file_instance, field_name, data)
+
                     # Save the instance even if no files were uploaded
                     file_instance.save()
 
