@@ -269,20 +269,6 @@ class MarketingModel(models.Model):
     updatedAt = models.DateTimeField(auto_now=True)
 
 
-class TaskModel(models.Model):
-    id = models.AutoField(primary_key=True)
-    taskTitle = models.CharField(max_length=500, null=True, blank=True)
-    taskClient = models.CharField(max_length=500, null=True, blank=True)
-    taskDate = models.DateField(null=True, blank=True)
-    taskTime = models.TimeField(null=True, blank=True)
-    taskLatitude = models.CharField(max_length=500, null=True, blank=True)
-    taskLongtitude = models.CharField(max_length=500, null=True, blank=True)
-    taskDescription = models.CharField(max_length=2500, null=True, blank=True)
-    hideStatus = models.IntegerField(default=0)
-    createdAt = models.DateTimeField(auto_now_add=True)
-    updatedAt = models.DateTimeField(auto_now=True)
-
-
 class EmployeeModel(models.Model):
     id = models.AutoField(primary_key=True)
     employeeName = models.CharField(max_length=500, null=True, blank=True)
@@ -571,6 +557,21 @@ class ClientPowerOfAttorneyModel(models.Model):
                                                 related_name="clientPowerOfAttorneyId", null=True, blank=True)
     clientPowerOfAttorneyName = models.CharField(max_length=500, null=True, blank=True)
     clientPowerOfAttorneyPanNo = models.CharField(max_length=500, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class TaskModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    taskTitle = models.CharField(max_length=500, null=True, blank=True)
+    taskClient = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="taskClient",
+                                         null=True, blank=True)
+    taskDate = models.DateField(null=True, blank=True)
+    taskTime = models.TimeField(null=True, blank=True)
+    taskLatitude = models.CharField(max_length=500, null=True, blank=True)
+    taskLongtitude = models.CharField(max_length=500, null=True, blank=True)
+    taskDescription = models.CharField(max_length=2500, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)

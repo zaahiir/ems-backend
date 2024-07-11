@@ -599,6 +599,7 @@ class AumYoyGrowthEntryViewSet(viewsets.ModelViewSet):
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
+                print(serializer.errors)
                 response = {'code': 0, 'message': "Unable to Process Request"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
@@ -966,14 +967,18 @@ class TaskViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
         if request.headers['token'] != "":
+            print("Received data:", request.data)  # Debug print
             if pk == "0":
                 serializer = TaskModelSerializers(data=request.data)
             else:
                 serializer = TaskModelSerializers(instance=TaskModel.objects.get(id=pk), data=request.data)
             if serializer.is_valid():
+                print("Validated data:", serializer.validated_data)  # Debug print
                 serializer.save()
+                print("Saved task:", serializer.__dict__)  # Debug print
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
+                print("Serializer errors:", serializer.errors)  # Debug print
                 response = {'code': 0, 'message': "Unable to Process Request"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
