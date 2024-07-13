@@ -644,6 +644,7 @@ class IndustryAumEntryViewSet(viewsets.ModelViewSet):
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
+                # print(serializer.errors)
                 response = {'code': 0, 'message': "Unable to Process Request"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
