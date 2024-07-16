@@ -15,6 +15,30 @@ class StateModelSerializers(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class ModeModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ModeModel
+        fields = '__all__'
+
+
+class IssueTypeModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = IssueTypeModel
+        fields = '__all__'
+
+
+class FormTypeModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = FormTypeModel
+        fields = '__all__'
+
+
+class GstTypeModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = GstTypeModel
+        fields = '__all__'
+
+
 class GenderModelSerializers(serializers.ModelSerializer):
     class Meta:
         model = GenderModel
@@ -45,9 +69,15 @@ class GuardianRelationshipModelSerializers(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class DefaultAccountModelSerializers(serializers.ModelSerializer):
+class AccountTypeModelSerializers(serializers.ModelSerializer):
     class Meta:
-        model = DefaultAccountModel
+        model = AccountTypeModel
+        fields = '__all__'
+
+
+class AccountPreferenceModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = AccountPreferenceModel
         fields = '__all__'
 
 
@@ -74,7 +104,8 @@ class AumEntryModelSerializers(serializers.ModelSerializer):
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation['aumArnNumber'] = instance.aumArnNumber.arnNumber if instance.aumArnNumber else None
-        representation['aumAmcAbbreviation'] = instance.aumAmcAbbreviation.amcAbbreviation if instance.aumAmcAbbreviation else None
+        representation[
+            'aumAmcAbbreviation'] = instance.aumAmcAbbreviation.amcAbbreviation if instance.aumAmcAbbreviation else None
         return representation
 
 
@@ -88,8 +119,10 @@ class CommissionEntryModelSerializers(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['commissionArnNumber'] = instance.commissionArnNumber.arnNumber if instance.commissionArnNumber else None
-        representation['commissionAmcAbbreviation'] = instance.commissionAmcAbbreviation.amcAbbreviation if instance.commissionAmcAbbreviation else None
+        representation[
+            'commissionArnNumber'] = instance.commissionArnNumber.arnNumber if instance.commissionArnNumber else None
+        representation[
+            'commissionAmcAbbreviation'] = instance.commissionAmcAbbreviation.amcAbbreviation if instance.commissionAmcAbbreviation else None
         return representation
 
 
@@ -102,30 +135,41 @@ class AumYoyGrowthEntryModelSerializers(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['aumYoyGrowthAmcAbbreviation'] = instance.aumYoyGrowthAmcAbbreviation.amcAbbreviation if instance.aumYoyGrowthAmcAbbreviation else None
+        representation[
+            'aumYoyGrowthAmcAbbreviation'] = instance.aumYoyGrowthAmcAbbreviation.amcAbbreviation if instance.aumYoyGrowthAmcAbbreviation else None
         return representation
 
 
 class IndustryAumEntryModelSerializers(serializers.ModelSerializer):
+    industryAumMode = serializers.PrimaryKeyRelatedField(queryset=ModeModel.objects.all())
+
     class Meta:
         model = IndustryAumEntryModel
         fields = '__all__'
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['industryAumMode'] = instance.industryAumMode.modeName if instance.industryAumMode else None
+        return representation
+
 
 class GstEntryModelSerializers(serializers.ModelSerializer):
     gstAmcAbbreviation = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+
     class Meta:
         model = GstEntryModel
         fields = '__all__'
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['gstAmcAbbreviation'] = instance.gstAmcAbbreviation.amcAbbreviation if instance.gstAmcAbbreviation else None
+        representation[
+            'gstAmcAbbreviation'] = instance.gstAmcAbbreviation.amcAbbreviation if instance.gstAmcAbbreviation else None
         return representation
 
 
 class NavModelSerializers(serializers.ModelSerializer):
     navAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+
     class Meta:
         model = NavModel
         fields = '__all__'
@@ -137,20 +181,29 @@ class NavModelSerializers(serializers.ModelSerializer):
 
 
 class IssueModelSerializers(serializers.ModelSerializer):
+    issueType = serializers.PrimaryKeyRelatedField(queryset=IssueTypeModel.objects.all())
+
     class Meta:
         model = IssueModel
         fields = '__all__'
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['issueType'] = instance.issueType.issueTypeName if instance.issueType else None
+        return representation
+
 
 class StatementModelSerializers(serializers.ModelSerializer):
     statementAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+
     class Meta:
         model = StatementModel
         fields = '__all__'
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['statementAmcName'] = instance.statementAmcName.amcAbbreviation if instance.statementAmcName else None
+        representation[
+            'statementAmcName'] = instance.statementAmcName.amcAbbreviation if instance.statementAmcName else None
         return representation
 
 
@@ -162,6 +215,7 @@ class CourierModelSerializers(serializers.ModelSerializer):
 
 class FormsModelSerializers(serializers.ModelSerializer):
     formsAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+
     class Meta:
         model = FormsModel
         fields = '__all__'
@@ -174,18 +228,21 @@ class FormsModelSerializers(serializers.ModelSerializer):
 
 class MarketingModelSerializers(serializers.ModelSerializer):
     marketingAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+
     class Meta:
         model = MarketingModel
         fields = '__all__'
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['marketingAmcName'] = instance.marketingAmcName.amcAbbreviation if instance.marketingAmcName else None
+        representation[
+            'marketingAmcName'] = instance.marketingAmcName.amcAbbreviation if instance.marketingAmcName else None
         return representation
 
 
 class TaskModelSerializers(serializers.ModelSerializer):
     taskClient = serializers.PrimaryKeyRelatedField(queryset=ClientModel.objects.all())
+
     class Meta:
         model = TaskModel
         fields = '__all__'

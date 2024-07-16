@@ -32,6 +32,38 @@ class StateModel(models.Model):
     updatedAt = models.DateTimeField(auto_now=True)
 
 
+class ModeModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    modeName = models.CharField(max_length=200, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class IssueTypeModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    issueTypeName = models.CharField(max_length=200, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class FormTypeModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    formTypeName = models.CharField(max_length=200, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class GstTypeModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    gstTypeName = models.CharField(max_length=200, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
 class GenderModel(models.Model):
     id = models.AutoField(primary_key=True)
     genderName = models.CharField(max_length=200, null=True, blank=True)
@@ -72,9 +104,17 @@ class GuardianRelationshipModel(models.Model):
     updatedAt = models.DateTimeField(auto_now=True)
 
 
-class DefaultAccountModel(models.Model):
+class AccountTypeModel(models.Model):
     id = models.AutoField(primary_key=True)
-    defaultAccount = models.CharField(max_length=200, null=True, blank=True)
+    AccountTypeName = models.CharField(max_length=200, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class AccountPreferenceModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    AccountPreferenceName = models.CharField(max_length=200, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -93,7 +133,7 @@ class ArnEntryModel(models.Model):
     arnCountry = CountryField(blank_label='(select country)', null=True, blank=True)
     arnPinCode = models.IntegerField(null=True, blank=True)
     arnEmail = models.EmailField(unique=True)
-    arnEvin = models.CharField(max_length=200, null=True, blank=True)
+    arnEuin = models.CharField(max_length=200, null=True, blank=True)
     arnGstNo = models.CharField(max_length=50, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
@@ -104,13 +144,12 @@ class AmcEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
     amcAbbreviation = models.CharField(max_length=200, null=True, blank=True)
     amcName = models.CharField(max_length=200, null=True, blank=True)
-    amcMobile = models.CharField(max_length=200, null=True, blank=True)
     amcAddress = models.CharField(max_length=500, null=True, blank=True)
     amcState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="amcState", null=True, blank=True)
     amcCountry = CountryField(blank_label='(select country)', null=True, blank=True)
     amcPinCode = models.IntegerField(null=True, blank=True)
     amcGstNo = models.CharField(max_length=50, null=True, blank=True)
-    amcGstType = models.CharField(max_length=200, null=True, blank=True)
+    amcGstType = models.ForeignKey(GstTypeModel, on_delete=models.CASCADE, related_name="amcGstType", null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -159,7 +198,8 @@ class IndustryAumEntryModel(models.Model):
     industryName = models.CharField(max_length=200, null=True, blank=True)
     industryAumDate = models.DateField(null=True, blank=True)
     industryAumAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    industryAumSiplone = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    industryAumMode = models.ForeignKey(ModeModel, on_delete=models.CASCADE,
+                                        related_name="industryAumMode", null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -196,7 +236,8 @@ class NavModel(models.Model):
 class IssueModel(models.Model):
     id = models.AutoField(primary_key=True)
     issueName = models.CharField(max_length=200, null=True, blank=True)
-    issueType = models.CharField(max_length=200, null=True, blank=True)
+    issueType = models.ForeignKey(IssueTypeModel, on_delete=models.CASCADE, related_name="issueType", null=True,
+                                   blank=True)
     issueDate = models.DateField(null=True, blank=True)
     issueResolutionDate = models.DateField(null=True, blank=True)
     issueDescription = models.CharField(max_length=2500, null=True, blank=True)
@@ -247,7 +288,8 @@ class FormsModel(models.Model):
     id = models.AutoField(primary_key=True)
     formsAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="formsAmcName", null=True,
                                      blank=True)
-    formsType = models.CharField(max_length=500, null=True, blank=True)
+    formsType = models.ForeignKey(FormTypeModel, on_delete=models.CASCADE, related_name="formsType", null=True,
+                                     blank=True)
     formsDescription = models.CharField(max_length=2500, null=True, blank=True)
     formsFile = models.FileField(upload_to="formsFile/", null=True, blank=True,
                                  validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
@@ -524,7 +566,8 @@ class ClientBankModel(models.Model):
                                      blank=True)
     clientBankName = models.ForeignKey(BankNameModel, on_delete=models.CASCADE, related_name="clientBankName",
                                        null=True, blank=True)
-    clientBankAccountType = models.CharField(max_length=500, null=True, blank=True)
+    clientBankAccountType = models.ForeignKey(AccountTypeModel, on_delete=models.CASCADE, related_name="clientBankAccountType",
+                                       null=True, blank=True)
     clientBankAccountNo = models.CharField(max_length=500, null=True, blank=True)
     clientBankIfsc = models.CharField(max_length=500, null=True, blank=True)
     clientBankMicr = models.CharField(max_length=500, null=True, blank=True)
@@ -532,8 +575,8 @@ class ClientBankModel(models.Model):
     clientBankBranch = models.CharField(max_length=500, null=True, blank=True)
     clientBankCity = models.CharField(max_length=500, null=True, blank=True)
     clientBankPincode = models.IntegerField(null=True, blank=True)
-    clientPrimaryAccount = models.ForeignKey(DefaultAccountModel, on_delete=models.CASCADE,
-                                             related_name="clientPrimaryAccount", null=True, blank=True)
+    clientAccountPreference = models.ForeignKey(AccountPreferenceModel, on_delete=models.CASCADE, related_name="clientAccountPreference",
+                                       null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -557,6 +600,8 @@ class ClientPowerOfAttorneyModel(models.Model):
                                                 related_name="clientPowerOfAttorneyId", null=True, blank=True)
     clientPowerOfAttorneyName = models.CharField(max_length=500, null=True, blank=True)
     clientPowerOfAttorneyPanNo = models.CharField(max_length=500, null=True, blank=True)
+    clientPowerOfAttorneyUpload = models.FileField(upload_to="clientPowerOfAttorneyUpload/", null=True, blank=True,
+                                          validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -566,7 +611,7 @@ class TaskModel(models.Model):
     id = models.AutoField(primary_key=True)
     taskTitle = models.CharField(max_length=500, null=True, blank=True)
     taskClient = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="taskClient",
-                                         null=True, blank=True)
+                                   null=True, blank=True)
     taskDate = models.DateField(null=True, blank=True)
     taskTime = models.TimeField(null=True, blank=True)
     taskLatitude = models.CharField(max_length=500, null=True, blank=True)
