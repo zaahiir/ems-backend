@@ -1,18 +1,19 @@
+import base64
+import logging
 import traceback
+from datetime import datetime
+from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db import transaction
 from django.http import JsonResponse
 from django_countries import countries
+from django_countries.fields import Country
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db import transaction
-from django.core.serializers.json import DjangoJSONEncoder
-from django_countries.fields import Country
-from datetime import datetime, date, timedelta
-from django.core.files.base import ContentFile
-import base64
-import logging
-from .serializers import *
 from .models import *
+from .serializers import *
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +202,7 @@ class FormTypeViewSet(viewsets.ModelViewSet):
         if request.headers['token'] != "":
             if pk == "0":
                 serializer = FormTypeModelSerializers(FormTypeModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                       many=True)
+                                                      many=True)
             else:
                 serializer = FormTypeModelSerializers(
                     FormTypeModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
@@ -243,7 +244,7 @@ class GstTypeViewSet(viewsets.ModelViewSet):
         if request.headers['token'] != "":
             if pk == "0":
                 serializer = GstTypeModelSerializers(GstTypeModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                       many=True)
+                                                     many=True)
             else:
                 serializer = GstTypeModelSerializers(
                     GstTypeModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
@@ -517,7 +518,7 @@ class AccountTypeViewSet(viewsets.ModelViewSet):
                 serializer = AccountTypeModelSerializers(data=request.data)
             else:
                 serializer = AccountTypeModelSerializers(instance=AccountTypeModel.objects.get(id=pk),
-                                                            data=request.data)
+                                                         data=request.data)
             if serializer.is_valid():
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
@@ -561,7 +562,7 @@ class AccountPreferenceViewSet(viewsets.ModelViewSet):
                 serializer = AccountPreferenceModelSerializers(data=request.data)
             else:
                 serializer = AccountPreferenceModelSerializers(instance=AccountPreferenceModel.objects.get(id=pk),
-                                                            data=request.data)
+                                                               data=request.data)
             if serializer.is_valid():
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
@@ -1055,19 +1056,28 @@ class CourierViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
-            if pk == "0":
-                serializer = CourierModelSerializers(data=request.data)
-            else:
-                serializer = CourierModelSerializers(instance=CourierModel.objects.get(id=pk), data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
+        if request.headers.get('token') != "":
+            try:
+                with transaction.atomic():
+                    if pk == "0":
+                        serializer = CourierModelSerializers(data=request.data)
+                    else:
+                        instance = CourierModel.objects.get(id=pk)
+                        serializer = CourierModelSerializers(instance=instance, data=request.data, partial=True)
+
+                    if serializer.is_valid():
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
+            except ValidationError as e:
+                response = {'code': 0, 'message': "File validation error", 'errors': str(e)}
+            except Exception as e:
+                response = {'code': 0, 'message': str(e)}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
+
+        return Response(response, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
@@ -1076,39 +1086,73 @@ class CourierViewSet(viewsets.ModelViewSet):
         return Response(response)
 
 
+class CourierFileViewSet(viewsets.ModelViewSet):
+    queryset = CourierFileModel.objects.filter(hideStatus=0)
+    serializer_class = CourierFileModelSerializers
+
+    @action(detail=True, methods=['GET'])
+    def listing(self, request, pk=None):
+        if request.headers.get('token') != "":
+            files = CourierFileModel.objects.filter(courier_id=pk, hideStatus=0)
+            serializer = CourierFileModelSerializers(files, many=True)
+            response = {'code': 1, 'data': serializer.data, 'message': "All Files Retrieved"}
+        else:
+            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def deletion(self, request, pk=None):
+        try:
+            file = CourierFileModel.objects.get(id=pk)
+            file.hideStatus = '1'
+            file.save()
+            response = {'code': 1, 'message': "File Deleted Successfully"}
+        except CourierFileModel.DoesNotExist:
+            response = {'code': 0, 'message': "File not found"}
+        except Exception as e:
+            response = {'code': 0, 'message': str(e)}
+        return Response(response)
+
+
+from rest_framework import status
+
+from rest_framework import status
+
+
 class FormsViewSet(viewsets.ModelViewSet):
     queryset = FormsModel.objects.filter(hideStatus=0)
     serializer_class = FormsModelSerializers
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        if request.headers.get('token') != "":
             if pk == "0":
-                serializer = FormsModelSerializers(FormsModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                   many=True)
+                serializer = FormsModelSerializers(FormsModel.objects.filter(hideStatus=0).order_by('-id'), many=True)
             else:
                 serializer = FormsModelSerializers(FormsModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
                                                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+            response = {'code': 1, 'data': serializer.data, 'message': "All Retrieved"}
         else:
             response = {'code': 0, 'data': [], 'message': "Token is invalid"}
         return Response(response)
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        if request.headers.get('token') != "":
             if pk == "0":
                 serializer = FormsModelSerializers(data=request.data)
             else:
-                serializer = FormsModelSerializers(instance=FormsModel.objects.get(id=pk), data=request.data)
+                instance = FormsModel.objects.get(id=pk)
+                serializer = FormsModelSerializers(instance=instance, data=request.data, partial=True)
+
             if serializer.is_valid():
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                response = {'code': 0, 'message': "Unable to Process Request", "error": serializer.errors}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
+        return Response(response, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
@@ -1138,19 +1182,21 @@ class MarketingViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        if request.headers.get('token') != "":
             if pk == "0":
                 serializer = MarketingModelSerializers(data=request.data)
             else:
-                serializer = MarketingModelSerializers(instance=MarketingModel.objects.get(id=pk), data=request.data)
+                instance = MarketingModel.objects.get(id=pk)
+                serializer = MarketingModelSerializers(instance=instance, data=request.data, partial=True)
+
             if serializer.is_valid():
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
+        return Response(response, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
@@ -1363,6 +1409,7 @@ class ClientViewSet(viewsets.ModelViewSet):
                         client_instance = client_serializer.save()
                         client_id = client_instance.id
                     else:
+                        print(client_serializer.errors)
                         return Response(
                             {'code': 0, 'message': "Invalid client data", 'errors': client_serializer.errors})
 
@@ -1512,11 +1559,30 @@ class ClientViewSet(viewsets.ModelViewSet):
                     attorney_data = request.data.get('attorneyJson', {})
                     attorney_instance, created = ClientPowerOfAttorneyModel.objects.get_or_create(
                         clientPowerOfAttorneyId=client_instance)
+
+                    # Handle file upload for attorney
+                    attorney_upload = attorney_data.get('clientPowerOfAttorneyUpload')
+                    if attorney_upload:
+                        if isinstance(attorney_upload, str) and attorney_upload.startswith('data:'):
+                            # Handle base64 encoded data
+                            format, imgstr = attorney_upload.split(';base64,')
+                            ext = format.split('/')[-1]
+                            data = ContentFile(base64.b64decode(imgstr), name=f'attorney_upload.{ext}')
+                            attorney_instance.clientPowerOfAttorneyUpload = data
+                        else:
+                            # Handle as regular file upload
+                            attorney_instance.clientPowerOfAttorneyUpload = attorney_upload
+
+                    # Remove the file from the data before serialization
+                    if 'clientPowerOfAttorneyUpload' in attorney_data:
+                        del attorney_data['clientPowerOfAttorneyUpload']
+
                     attorney_serializer = ClientPowerOfAttorneyModelSerializers(instance=attorney_instance,
                                                                                 data=attorney_data)
                     if attorney_serializer.is_valid():
                         attorney_serializer.save(clientPowerOfAttorneyId=client_instance)
                     else:
+                        print(attorney_serializer.errors)
                         return Response(
                             {'code': 0, 'message': "Invalid attorney data", 'errors': attorney_serializer.errors})
 

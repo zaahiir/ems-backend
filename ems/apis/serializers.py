@@ -1,5 +1,7 @@
 from rest_framework import serializers
 from django_countries.serializers import CountryFieldMixin
+from django.core.validators import FileExtensionValidator
+
 from .models import *
 
 
@@ -207,14 +209,59 @@ class StatementModelSerializers(serializers.ModelSerializer):
         return representation
 
 
+class CourierFileModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = CourierFileModel
+        fields = ('id', 'courierFile')
+
+
 class CourierModelSerializers(serializers.ModelSerializer):
+    courierFile = serializers.ListField(
+        child=serializers.FileField(
+            max_length=100000,
+            allow_empty_file=False,
+            use_url=False,
+            validators=[FileExtensionValidator(
+                allowed_extensions=['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt']
+            )]
+        ),
+        write_only=True,
+        required=False
+    )
+    files = CourierFileModelSerializers(many=True, read_only=True, source='courier')
+
     class Meta:
         model = CourierModel
         fields = '__all__'
 
+    def create(self, validated_data):
+        files_data = validated_data.pop('courierFile', None)
+        courier = CourierModel.objects.create(**validated_data)
+        if files_data:
+            for file_data in files_data:
+                CourierFileModel.objects.create(courier=courier, courierFile=file_data)
+        return courier
+
+    def update(self, instance, validated_data):
+        files_data = validated_data.pop('courierFile', None)
+        instance = super().update(instance, validated_data)
+        if files_data:
+            for file_data in files_data:
+                CourierFileModel.objects.create(courier=instance, courierFile=file_data)
+        return instance
+
 
 class FormsModelSerializers(serializers.ModelSerializer):
     formsAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+    formsType = serializers.PrimaryKeyRelatedField(queryset=FormTypeModel.objects.all())
+    formsFile = serializers.FileField(
+        allow_empty_file=True,
+        use_url=False,
+        required=False,
+        validators=[FileExtensionValidator(allowed_extensions=[
+            'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt'
+        ])]
+    )
 
     class Meta:
         model = FormsModel
@@ -223,11 +270,18 @@ class FormsModelSerializers(serializers.ModelSerializer):
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation['formsAmcName'] = instance.formsAmcName.amcAbbreviation if instance.formsAmcName else None
+        representation['formsType'] = instance.formsType.formTypeName if instance.formsType else None
+        if instance.formsFile:
+            representation['formsFile'] = instance.formsFile.url
         return representation
 
 
 class MarketingModelSerializers(serializers.ModelSerializer):
     marketingAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+    marketingFile = serializers.FileField(
+        validators=[FileExtensionValidator(allowed_extensions=['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt'])],
+        required=False
+    )
 
     class Meta:
         model = MarketingModel
@@ -235,8 +289,9 @@ class MarketingModelSerializers(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation[
-            'marketingAmcName'] = instance.marketingAmcName.amcAbbreviation if instance.marketingAmcName else None
+        representation['marketingAmcName'] = instance.marketingAmcName.amcAbbreviation if instance.marketingAmcName else None
+        if instance.marketingFile:
+            representation['marketingFile'] = instance.marketingFile.url
         return representation
 
 

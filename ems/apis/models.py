@@ -106,7 +106,7 @@ class GuardianRelationshipModel(models.Model):
 
 class AccountTypeModel(models.Model):
     id = models.AutoField(primary_key=True)
-    AccountTypeName = models.CharField(max_length=200, null=True, blank=True)
+    accountTypeName = models.CharField(max_length=200, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -114,7 +114,7 @@ class AccountTypeModel(models.Model):
 
 class AccountPreferenceModel(models.Model):
     id = models.AutoField(primary_key=True)
-    AccountPreferenceName = models.CharField(max_length=200, null=True, blank=True)
+    accountPreferenceName = models.CharField(max_length=200, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -149,7 +149,8 @@ class AmcEntryModel(models.Model):
     amcCountry = CountryField(blank_label='(select country)', null=True, blank=True)
     amcPinCode = models.IntegerField(null=True, blank=True)
     amcGstNo = models.CharField(max_length=50, null=True, blank=True)
-    amcGstType = models.ForeignKey(GstTypeModel, on_delete=models.CASCADE, related_name="amcGstType", null=True, blank=True)
+    amcGstType = models.ForeignKey(GstTypeModel, on_delete=models.CASCADE, related_name="amcGstType", null=True,
+                                   blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -237,7 +238,7 @@ class IssueModel(models.Model):
     id = models.AutoField(primary_key=True)
     issueName = models.CharField(max_length=200, null=True, blank=True)
     issueType = models.ForeignKey(IssueTypeModel, on_delete=models.CASCADE, related_name="issueType", null=True,
-                                   blank=True)
+                                  blank=True)
     issueDate = models.DateField(null=True, blank=True)
     issueResolutionDate = models.DateField(null=True, blank=True)
     issueDescription = models.CharField(max_length=2500, null=True, blank=True)
@@ -277,8 +278,16 @@ class CourierModel(models.Model):
     courierClientAddress = models.CharField(max_length=500, null=True, blank=True)
     courierMobileNumber = models.CharField(max_length=200, null=True, blank=True)
     courierEmail = models.EmailField(unique=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class CourierFileModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    courier = models.ForeignKey(CourierModel, related_name='courier', on_delete=models.CASCADE)
     courierFile = models.FileField(upload_to="courierFile/", null=True, blank=True,
-                                   validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+                                   validators=[FileExtensionValidator(allowed_extensions=["pdf", "doc", "docx"])])
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -289,10 +298,10 @@ class FormsModel(models.Model):
     formsAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="formsAmcName", null=True,
                                      blank=True)
     formsType = models.ForeignKey(FormTypeModel, on_delete=models.CASCADE, related_name="formsType", null=True,
-                                     blank=True)
+                                  blank=True)
     formsDescription = models.CharField(max_length=2500, null=True, blank=True)
     formsFile = models.FileField(upload_to="formsFile/", null=True, blank=True,
-                                 validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+                                 validators=[FileExtensionValidator(allowed_extensions=['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt'])])
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -305,7 +314,8 @@ class MarketingModel(models.Model):
     marketingType = models.CharField(max_length=500, null=True, blank=True)
     marketingDescription = models.CharField(max_length=2500, null=True, blank=True)
     marketingFile = models.FileField(upload_to="marketingFile/", null=True, blank=True,
-                                     validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+                                     validators=[FileExtensionValidator(allowed_extensions=[
+                                         'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt'])])
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -320,7 +330,7 @@ class EmployeeModel(models.Model):
     employeeAddress = models.CharField(max_length=2500, null=True, blank=True)
     employeeOtherDetail = models.CharField(max_length=2500, null=True, blank=True)
     employeeFile = models.FileField(upload_to="employeeFile/", null=True, blank=True,
-                                    validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+                                    validators=[FileExtensionValidator(allowed_extensions=['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt'])])
     employeeUserType = models.ForeignKey(UserTypeModel, on_delete=models.CASCADE, related_name="employeeUserType",
                                          null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
@@ -566,8 +576,9 @@ class ClientBankModel(models.Model):
                                      blank=True)
     clientBankName = models.ForeignKey(BankNameModel, on_delete=models.CASCADE, related_name="clientBankName",
                                        null=True, blank=True)
-    clientBankAccountType = models.ForeignKey(AccountTypeModel, on_delete=models.CASCADE, related_name="clientBankAccountType",
-                                       null=True, blank=True)
+    clientBankAccountType = models.ForeignKey(AccountTypeModel, on_delete=models.CASCADE,
+                                              related_name="clientBankAccountType",
+                                              null=True, blank=True)
     clientBankAccountNo = models.CharField(max_length=500, null=True, blank=True)
     clientBankIfsc = models.CharField(max_length=500, null=True, blank=True)
     clientBankMicr = models.CharField(max_length=500, null=True, blank=True)
@@ -575,8 +586,9 @@ class ClientBankModel(models.Model):
     clientBankBranch = models.CharField(max_length=500, null=True, blank=True)
     clientBankCity = models.CharField(max_length=500, null=True, blank=True)
     clientBankPincode = models.IntegerField(null=True, blank=True)
-    clientAccountPreference = models.ForeignKey(AccountPreferenceModel, on_delete=models.CASCADE, related_name="clientAccountPreference",
-                                       null=True, blank=True)
+    clientAccountPreference = models.ForeignKey(AccountPreferenceModel, on_delete=models.CASCADE,
+                                                related_name="clientAccountPreference",
+                                                null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -601,7 +613,7 @@ class ClientPowerOfAttorneyModel(models.Model):
     clientPowerOfAttorneyName = models.CharField(max_length=500, null=True, blank=True)
     clientPowerOfAttorneyPanNo = models.CharField(max_length=500, null=True, blank=True)
     clientPowerOfAttorneyUpload = models.FileField(upload_to="clientPowerOfAttorneyUpload/", null=True, blank=True,
-                                          validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+                                                   validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
