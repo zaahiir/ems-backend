@@ -96,9 +96,9 @@ class BankNameModel(models.Model):
     updatedAt = models.DateTimeField(auto_now=True)
 
 
-class GuardianRelationshipModel(models.Model):
+class RelationshipModel(models.Model):
     id = models.AutoField(primary_key=True)
-    guardianRelationship = models.CharField(max_length=200, null=True, blank=True)
+    relationship = models.CharField(max_length=200, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -472,12 +472,18 @@ class ClientOverseasAddressModel(models.Model):
 
 class ClientNomineeModel(models.Model):
     id = models.AutoField(primary_key=True)
-    clientGuardianId = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="clientGuardianId",
+    clientNomineeId = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="clientNomineeId",
                                          null=True, blank=True)
-    clientGuardianName = models.CharField(max_length=500, null=True, blank=True)
-    clientGuardianRelation = models.ForeignKey(GuardianRelationshipModel, on_delete=models.CASCADE,
-                                               related_name="clientGuardianRelation", null=True, blank=True)
-    clientGuardianPanNo = models.CharField(max_length=500, null=True, blank=True)
+    clientNomineeName = models.CharField(max_length=500, null=True, blank=True)
+    clientNomineeRelation = models.ForeignKey(RelationshipModel, on_delete=models.CASCADE,
+                                               related_name="clientNomineeRelation", null=True, blank=True)
+    clientNomineePanNo = models.CharField(max_length=500, null=True, blank=True)
+    clientNomineeDob = models.DateField(null=True, blank=True)
+    clientNomineePercentageAllocation = models.CharField(max_length=500, null=True, blank=True)
+    clientNomineeGuardianName = models.CharField(max_length=500, null=True, blank=True)
+    clientNomineeGuardianRelation = models.ForeignKey(RelationshipModel, on_delete=models.CASCADE,
+                                               related_name="clientNomineeGuardianRelation", null=True, blank=True)
+    clientNomineeGuardianPanNo = models.CharField(max_length=500, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -614,6 +620,19 @@ class ClientPowerOfAttorneyModel(models.Model):
     clientPowerOfAttorneyPanNo = models.CharField(max_length=500, null=True, blank=True)
     clientPowerOfAttorneyUpload = models.FileField(upload_to="clientPowerOfAttorneyUpload/", null=True, blank=True,
                                                    validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class ClientGuardianModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    clientGuardianId = models.ForeignKey(ClientModel, on_delete=models.CASCADE,
+                                                related_name="clientGuardianId", null=True, blank=True)
+    clientGuardianName = models.CharField(max_length=500, null=True, blank=True)
+    clientGuardianRelation = models.ForeignKey(RelationshipModel, on_delete=models.CASCADE,
+                                               related_name="clientGuardianRelation", null=True, blank=True)
+    clientGuardianPanNo = models.CharField(max_length=500, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)

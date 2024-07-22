@@ -65,9 +65,9 @@ class BankNameModelSerializers(serializers.ModelSerializer):
         fields = '__all__'
 
 
-class GuardianRelationshipModelSerializers(serializers.ModelSerializer):
+class RelationshipModelSerializers(serializers.ModelSerializer):
     class Meta:
-        model = GuardianRelationshipModel
+        model = RelationshipModel
         fields = '__all__'
 
 
@@ -401,4 +401,10 @@ class ClientTaxModelSerializers(serializers.ModelSerializer):
 class ClientPowerOfAttorneyModelSerializers(serializers.ModelSerializer):
     class Meta:
         model = ClientPowerOfAttorneyModel
+        fields = '__all__'
+
+
+class ClientGuardianModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = ClientGuardianModel
         fields = '__all__'

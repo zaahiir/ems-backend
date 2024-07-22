@@ -447,20 +447,20 @@ class BankNameViewSet(viewsets.ModelViewSet):
         return Response(response)
 
 
-class GuardianRelationshipViewSet(viewsets.ModelViewSet):
-    queryset = GuardianRelationshipModel.objects.filter(hideStatus=0)
-    serializer_class = GuardianRelationshipModelSerializers
+class RelationshipViewSet(viewsets.ModelViewSet):
+    queryset = RelationshipModel.objects.filter(hideStatus=0)
+    serializer_class = RelationshipModelSerializers
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
         if request.headers['token'] != "":
             if pk == "0":
-                serializer = GuardianRelationshipModelSerializers(
-                    GuardianRelationshipModel.objects.filter(hideStatus=0).order_by('-id'),
+                serializer = RelationshipModelSerializers(
+                    RelationshipModel.objects.filter(hideStatus=0).order_by('-id'),
                     many=True)
             else:
-                serializer = GuardianRelationshipModelSerializers(
-                    GuardianRelationshipModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
+                serializer = RelationshipModelSerializers(
+                    RelationshipModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
                     many=True)
             response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
         else:
@@ -471,9 +471,9 @@ class GuardianRelationshipViewSet(viewsets.ModelViewSet):
     def processing(self, request, pk=None):
         if request.headers['token'] != "":
             if pk == "0":
-                serializer = GuardianRelationshipModelSerializers(data=request.data)
+                serializer = RelationshipModelSerializers(data=request.data)
             else:
-                serializer = GuardianRelationshipModelSerializers(instance=GuardianRelationshipModel.objects.get(id=pk),
+                serializer = RelationshipModelSerializers(instance=RelationshipModel.objects.get(id=pk),
                                                                   data=request.data)
             if serializer.is_valid():
                 serializer.save()
@@ -486,7 +486,7 @@ class GuardianRelationshipViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        GuardianRelationshipModel.objects.filter(id=pk).update(hideStatus='1')
+        RelationshipModel.objects.filter(id=pk).update(hideStatus='1')
         response = {'code': 1, 'message': "Done Successfully"}
         return Response(response)
 
@@ -1341,7 +1341,7 @@ class ClientViewSet(viewsets.ModelViewSet):
                     ClientOverseasAddressModel.objects.filter(hideStatus=0, clientOverseasAddressId=pk).order_by('-id'),
                     many=True)
                 client_nominee = ClientNomineeModelSerializers(
-                    ClientNomineeModel.objects.filter(hideStatus=0, clientGuardianId=pk).order_by('-id'), many=True)
+                    ClientNomineeModel.objects.filter(hideStatus=0, clientNomineeId=pk).order_by('-id'), many=True)
                 client_insurance = ClientInsuranceModelSerializers(
                     ClientInsuranceModel.objects.filter(hideStatus=0, clientInsuranceId=pk).order_by('-id'), many=True)
                 client_medical_insurance = ClientMedicalInsuranceModelSerializers(
@@ -1360,6 +1360,9 @@ class ClientViewSet(viewsets.ModelViewSet):
                 client_attorney = ClientPowerOfAttorneyModelSerializers(
                     ClientPowerOfAttorneyModel.objects.filter(hideStatus=0, clientPowerOfAttorneyId=pk).order_by('-id'),
                     many=True)
+                client_guardian = ClientGuardianModelSerializers(
+                    ClientGuardianModel.objects.filter(hideStatus=0, clientGuardianId=pk).order_by('-id'),
+                    many=True)
 
                 combined_serializer = {
                     "client": client.data,
@@ -1377,6 +1380,7 @@ class ClientViewSet(viewsets.ModelViewSet):
                     "bank": client_bank.data,
                     "tax": client_tax.data,
                     "attorney": client_attorney.data,
+                    "guardian": client_guardian.data,
                 }
                 return JsonResponse({'code': 1, 'data': combined_serializer, 'message': "All Retrieved"},
                                     encoder=CustomJSONEncoder)
@@ -1477,11 +1481,11 @@ class ClientViewSet(viewsets.ModelViewSet):
 
                     # Process nominees
                     nominee_data = request.data.get('nomineeJson', [])
-                    ClientNomineeModel.objects.filter(clientGuardianId=client_instance).delete()
+                    ClientNomineeModel.objects.filter(clientNomineeId=client_instance).delete()
                     for nominee in nominee_data:
                         nominee_serializer = ClientNomineeModelSerializers(data=nominee)
                         if nominee_serializer.is_valid():
-                            nominee_serializer.save(clientGuardianId=client_instance)
+                            nominee_serializer.save(clientNomineeId=client_instance)
                         else:
                             return Response(
                                 {'code': 0, 'message': "Invalid nominee data", 'errors': nominee_serializer.errors})
@@ -1555,6 +1559,15 @@ class ClientViewSet(viewsets.ModelViewSet):
                     else:
                         return Response({'code': 0, 'message': "Invalid tax data", 'errors': tax_serializer.errors})
 
+                    # Process guardian details
+                    guardian_data = request.data.get('guardianJSON', {})
+                    guardian_instance, created = ClientGuardianModel.objects.get_or_create(clientGuardianId=client_instance)
+                    guardian_serializer = ClientTaxModelSerializers(instance=guardian_instance, data=guardian_data)
+                    if guardian_serializer.is_valid():
+                        guardian_serializer.save(clientGuardianId=client_instance)
+                    else:
+                        return Response({'code': 0, 'message': "Invalid tax data", 'errors': guardian_serializer.errors})
+
                     # Process power of attorney
                     attorney_data = request.data.get('attorneyJson', {})
                     attorney_instance, created = ClientPowerOfAttorneyModel.objects.get_or_create(
@@ -1610,7 +1623,7 @@ class ClientViewSet(viewsets.ModelViewSet):
                 ClientPermanentAddressModel.objects.filter(clientPermanentAddressId=client).update(hideStatus='1')
                 ClientOfficeAddressModel.objects.filter(clientOfficeAddressId=client).update(hideStatus='1')
                 ClientOverseasAddressModel.objects.filter(clientOverseasAddressId=client).update(hideStatus='1')
-                ClientNomineeModel.objects.filter(clientGuardianId=client).update(hideStatus='1')
+                ClientNomineeModel.objects.filter(clientNomineeId=client).update(hideStatus='1')
                 ClientInsuranceModel.objects.filter(clientInsuranceId=client).update(hideStatus='1')
                 ClientMedicalInsuranceModel.objects.filter(clientMedicalInsuranceId=client).update(hideStatus='1')
                 ClientTermInsuranceModel.objects.filter(clientTermInsuranceId=client).update(hideStatus='1')
@@ -1618,6 +1631,7 @@ class ClientViewSet(viewsets.ModelViewSet):
                 ClientBankModel.objects.filter(clientBankId=client).update(hideStatus='1')
                 ClientTaxModel.objects.filter(clientTaxId=client).update(hideStatus='1')
                 ClientPowerOfAttorneyModel.objects.filter(clientPowerOfAttorneyId=client).update(hideStatus='1')
+                ClientGuardianModel.objects.filter(clientGuardianId=client).update(hideStatus='1')
 
             return Response({'code': 1, 'message': "Client and all related data hidden successfully"})
         except ClientModel.DoesNotExist:
