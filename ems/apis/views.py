@@ -265,7 +265,7 @@ class GstTypeViewSet(viewsets.ModelViewSet):
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -664,7 +664,7 @@ class AmcEntryViewSet(viewsets.ModelViewSet):
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
                 print("Serializer errors:", serializer.errors)
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)

@@ -90,9 +90,16 @@ class ArnEntryModelSerializers(serializers.ModelSerializer):
 
 
 class AmcEntryModelSerializers(CountryFieldMixin, serializers.ModelSerializer):
+    amcGstType = serializers.PrimaryKeyRelatedField(queryset=GstTypeModel.objects.all())
+
     class Meta:
         model = AmcEntryModel
         fields = '__all__'
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['amcGstType'] = instance.amcGstType.gstTypeName if instance.amcGstType else None
+        return representation
 
 
 class AumEntryModelSerializers(serializers.ModelSerializer):
@@ -279,7 +286,8 @@ class FormsModelSerializers(serializers.ModelSerializer):
 class MarketingModelSerializers(serializers.ModelSerializer):
     marketingAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
     marketingFile = serializers.FileField(
-        validators=[FileExtensionValidator(allowed_extensions=['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt'])],
+        validators=[FileExtensionValidator(
+            allowed_extensions=['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt'])],
         required=False
     )
 
@@ -289,7 +297,8 @@ class MarketingModelSerializers(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['marketingAmcName'] = instance.marketingAmcName.amcAbbreviation if instance.marketingAmcName else None
+        representation[
+            'marketingAmcName'] = instance.marketingAmcName.amcAbbreviation if instance.marketingAmcName else None
         if instance.marketingFile:
             representation['marketingFile'] = instance.marketingFile.url
         return representation
