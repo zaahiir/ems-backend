@@ -1,8 +1,9 @@
+import logging
 from rest_framework import serializers
 from django_countries.serializers import CountryFieldMixin
-from django.core.validators import FileExtensionValidator
-
 from .models import *
+
+logger = logging.getLogger(__name__)
 
 
 class UserTypeModelSerializers(serializers.ModelSerializer):
@@ -393,6 +394,56 @@ class ClientUploadFileModelSerializers(serializers.ModelSerializer):
     class Meta:
         model = ClientUploadFileModel
         fields = '__all__'
+
+    def validate_file_field(self, value):
+        if value:
+            file_extension = value.name.split('.')[-1].lower()
+            if file_extension not in ['jpg', 'jpeg', 'pdf']:
+                raise serializers.ValidationError("Only JPG, JPEG, and PDF files are allowed.")
+        return value
+
+    # Add validation methods for each file field
+    def validate_clientPaasPortSizePhoto(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientPanCardPhoto(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientAadharCard(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientDrivingLicense(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientVoterIDFrontImage(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientVoterIDBackImage(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientPassportFrontImage(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientPassportBackImage(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientForeignAddressProof(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientForeignTaxIdentificationProof(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientCancelledChequeCopy(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientBankAccountStatementOrPassbook(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientChildrenBirthCertificate(self, value):
+        return self.validate_file_field(value)
+
+    def validate_clientPowerOfAttorneyUpload(self, value):
+        return self.validate_file_field(value)
 
 
 class ClientBankModelSerializers(serializers.ModelSerializer):

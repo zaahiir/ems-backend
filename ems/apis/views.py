@@ -1,4 +1,6 @@
 import base64
+import uuid
+import os
 import logging
 import traceback
 from datetime import datetime
@@ -474,7 +476,7 @@ class RelationshipViewSet(viewsets.ModelViewSet):
                 serializer = RelationshipModelSerializers(data=request.data)
             else:
                 serializer = RelationshipModelSerializers(instance=RelationshipModel.objects.get(id=pk),
-                                                                  data=request.data)
+                                                          data=request.data)
             if serializer.is_valid():
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
@@ -613,7 +615,7 @@ class ArnEntryViewSet(viewsets.ModelViewSet):
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1114,11 +1116,6 @@ class CourierFileViewSet(viewsets.ModelViewSet):
         return Response(response)
 
 
-from rest_framework import status
-
-from rest_framework import status
-
-
 class FormsViewSet(viewsets.ModelViewSet):
     queryset = FormsModel.objects.filter(hideStatus=0)
     serializer_class = FormsModelSerializers
@@ -1411,9 +1408,8 @@ class ClientViewSet(viewsets.ModelViewSet):
                         client_serializer = ClientModelSerializers(instance=client_instance, data=client_data)
                     if client_serializer.is_valid():
                         client_instance = client_serializer.save()
-                        client_id = client_instance.id
                     else:
-                        print(client_serializer.errors)
+                        logger.error(f"Client serializer errors: {client_serializer.errors}")
                         return Response(
                             {'code': 0, 'message': "Invalid client data", 'errors': client_serializer.errors})
 
@@ -1514,30 +1510,26 @@ class ClientViewSet(viewsets.ModelViewSet):
 
                     # Process file uploads
                     upload_files_data = request.data.get('uploadFilesJson', {})
-                    # Always create or get the file instance
                     file_instance, created = ClientUploadFileModel.objects.get_or_create(
                         clientUploadFileId=client_instance)
                     if upload_files_data:
                         for field_name, file_data in upload_files_data.items():
                             if file_data:
                                 if isinstance(file_data, str) and file_data.startswith('data:'):
-                                    # Handle base64 encoded data
                                     format, imgstr = file_data.split(';base64,')
                                     ext = format.split('/')[-1]
                                     data = ContentFile(base64.b64decode(imgstr), name=f'{field_name}.{ext}')
-                                elif isinstance(file_data, dict) and 'name' in file_data and 'content' in file_data:
-                                    # Handle dictionary with name and content
+                                elif isinstance(file_data,
+                                                dict) and 'name' in file_data and 'content' in file_data:
                                     ext = file_data['name'].split('.')[-1]
-                                    data = ContentFile(base64.b64decode(file_data['content']), name=file_data['name'])
+                                    data = ContentFile(base64.b64decode(file_data['content']),
+                                                       name=file_data['name'])
                                 else:
-                                    # Unsupported format
-                                    logger.warning(f"Unexpected file data format for {field_name}: {type(file_data)}")
+                                    logger.warning(
+                                        f"Unexpected file data format for {field_name}: {type(file_data)}")
                                     continue
-
-                            setattr(file_instance, field_name, data)
-
-                    # Save the instance even if no files were uploaded
-                    file_instance.save()
+                                setattr(file_instance, field_name, data)
+                        file_instance.save()
 
                     # Process bank details
                     bank_data = request.data.get('bankJson', [])
@@ -1561,49 +1553,36 @@ class ClientViewSet(viewsets.ModelViewSet):
 
                     # Process guardian details
                     guardian_data = request.data.get('guardianJSON', {})
-                    guardian_instance, created = ClientGuardianModel.objects.get_or_create(clientGuardianId=client_instance)
-                    guardian_serializer = ClientTaxModelSerializers(instance=guardian_instance, data=guardian_data)
+                    guardian_instance, created = ClientGuardianModel.objects.get_or_create(
+                        clientGuardianId=client_instance)
+                    guardian_serializer = ClientGuardianModelSerializers(instance=guardian_instance, data=guardian_data)
                     if guardian_serializer.is_valid():
                         guardian_serializer.save(clientGuardianId=client_instance)
                     else:
-                        return Response({'code': 0, 'message': "Invalid tax data", 'errors': guardian_serializer.errors})
+                        return Response(
+                            {'code': 0, 'message': "Invalid guardian data", 'errors': guardian_serializer.errors})
 
-                    # Process power of attorney
+                    # Process attorney details
                     attorney_data = request.data.get('attorneyJson', {})
                     attorney_instance, created = ClientPowerOfAttorneyModel.objects.get_or_create(
                         clientPowerOfAttorneyId=client_instance)
-
-                    # Handle file upload for attorney
-                    attorney_upload = attorney_data.get('clientPowerOfAttorneyUpload')
-                    if attorney_upload:
-                        if isinstance(attorney_upload, str) and attorney_upload.startswith('data:'):
-                            # Handle base64 encoded data
-                            format, imgstr = attorney_upload.split(';base64,')
-                            ext = format.split('/')[-1]
-                            data = ContentFile(base64.b64decode(imgstr), name=f'attorney_upload.{ext}')
-                            attorney_instance.clientPowerOfAttorneyUpload = data
-                        else:
-                            # Handle as regular file upload
-                            attorney_instance.clientPowerOfAttorneyUpload = attorney_upload
-
-                    # Remove the file from the data before serialization
-                    if 'clientPowerOfAttorneyUpload' in attorney_data:
-                        del attorney_data['clientPowerOfAttorneyUpload']
-
                     attorney_serializer = ClientPowerOfAttorneyModelSerializers(instance=attorney_instance,
                                                                                 data=attorney_data)
                     if attorney_serializer.is_valid():
                         attorney_serializer.save(clientPowerOfAttorneyId=client_instance)
                     else:
-                        print(attorney_serializer.errors)
                         return Response(
-                            {'code': 0, 'message': "Invalid attorney data", 'errors': attorney_serializer.errors})
+                            {'code': 0, 'message': "Invalid attorney data", 'errors': attorney_serializer.errors},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-                    return Response({'code': 1, 'message': "Client data processed successfully"})
+                return Response({'code': 1, 'message': "Client data processed successfully"},
+                                status=status.HTTP_200_OK)
             except Exception as e:
-                return Response({'code': 0, 'message': f"An error occurred: {str(e)}"})
+                logger.error(f"Error processing client data: {e}")
+                return Response({'code': 0, 'message': "An error occurred while processing the data"},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         else:
-            return Response({'code': 0, 'message': "Token is invalid"})
+            return Response({'code': 0, 'message': "Authentication token missing"}, status=status.HTTP_401_UNAUTHORIZED)
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
@@ -2190,13 +2169,18 @@ class ClientPowerOfAttorneyViewSet(viewsets.ModelViewSet):
             if pk == "0":
                 serializer = ClientPowerOfAttorneyModelSerializers(data=request.data)
             else:
-                serializer = ClientPowerOfAttorneyModelSerializers(
-                    instance=ClientPowerOfAttorneyModel.objects.get(id=pk), data=request.data)
+                instance = ClientPowerOfAttorneyModel.objects.get(id=pk)
+                serializer = ClientPowerOfAttorneyModelSerializers(instance=instance, data=request.data)
+
             if serializer.is_valid():
+                if 'clientPowerOfAttorneyUpload' in request.FILES:
+                    file = request.FILES['clientPowerOfAttorneyUpload']
+                    serializer.validated_data['clientPowerOfAttorneyUpload'] = file
+
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)

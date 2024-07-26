@@ -2,6 +2,15 @@ from django.core.validators import FileExtensionValidator
 from django_countries.fields import CountryField
 from django.db import models
 import os
+import uuid
+from django.core.files.storage import FileSystemStorage
+
+
+class UniqueFileStorage(FileSystemStorage):
+    def get_available_name(self, name, max_length=None):
+        ext = name.split('.')[-1]
+        name = f"{uuid.uuid4()}.{ext}"
+        return super().get_available_name(name, max_length=max_length)
 
 
 def upload_to(instance, filename):
@@ -301,7 +310,9 @@ class FormsModel(models.Model):
                                   blank=True)
     formsDescription = models.CharField(max_length=2500, null=True, blank=True)
     formsFile = models.FileField(upload_to="formsFile/", null=True, blank=True,
-                                 validators=[FileExtensionValidator(allowed_extensions=['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt'])])
+                                 validators=[FileExtensionValidator(
+                                     allowed_extensions=['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv',
+                                                         'txt'])])
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -330,7 +341,7 @@ class EmployeeModel(models.Model):
     employeeAddress = models.CharField(max_length=2500, null=True, blank=True)
     employeeOtherDetail = models.CharField(max_length=2500, null=True, blank=True)
     employeeFile = models.FileField(upload_to="employeeFile/", null=True, blank=True,
-                                    validators=[FileExtensionValidator(allowed_extensions=['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt'])])
+                                    validators=[FileExtensionValidator(allowed_extensions=['pdf', 'jpg', 'jpeg'])])
     employeeUserType = models.ForeignKey(UserTypeModel, on_delete=models.CASCADE, related_name="employeeUserType",
                                          null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
@@ -341,12 +352,12 @@ class EmployeeModel(models.Model):
 class ClientModel(models.Model):
     id = models.AutoField(primary_key=True)
     clientName = models.CharField(max_length=500, null=True, blank=True)
-    clientEmail = models.EmailField(unique=True)
+    clientEmail = models.EmailField()
     clientPhone = models.CharField(max_length=500, null=True, blank=True)
     clientAlternatePhone = models.CharField(max_length=500, null=True, blank=True)
-    clientPanNo = models.CharField(max_length=500, null=True, blank=True, unique=True)
+    clientPanNo = models.CharField(max_length=500, null=True, blank=True)
     clientKycNo = models.CharField(max_length=500, null=True, blank=True, unique=True)
-    clientAadharNo = models.CharField(max_length=500, null=True, blank=True, unique=True)
+    clientAadharNo = models.CharField(max_length=500, null=True, blank=True)
     clientVoterId = models.CharField(max_length=500, null=True, blank=True, unique=True)
     clientDrivingLicenseNo = models.CharField(max_length=500, null=True, blank=True, unique=True)
     clientDrivingLicenseExpiryDate = models.DateField(null=True, blank=True)
@@ -473,16 +484,17 @@ class ClientOverseasAddressModel(models.Model):
 class ClientNomineeModel(models.Model):
     id = models.AutoField(primary_key=True)
     clientNomineeId = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="clientNomineeId",
-                                         null=True, blank=True)
+                                        null=True, blank=True)
     clientNomineeName = models.CharField(max_length=500, null=True, blank=True)
     clientNomineeRelation = models.ForeignKey(RelationshipModel, on_delete=models.CASCADE,
-                                               related_name="clientNomineeRelation", null=True, blank=True)
+                                              related_name="clientNomineeRelation", null=True, blank=True)
     clientNomineePanNo = models.CharField(max_length=500, null=True, blank=True)
     clientNomineeDob = models.DateField(null=True, blank=True)
     clientNomineePercentageAllocation = models.CharField(max_length=500, null=True, blank=True)
     clientNomineeGuardianName = models.CharField(max_length=500, null=True, blank=True)
     clientNomineeGuardianRelation = models.ForeignKey(RelationshipModel, on_delete=models.CASCADE,
-                                               related_name="clientNomineeGuardianRelation", null=True, blank=True)
+                                                      related_name="clientNomineeGuardianRelation", null=True,
+                                                      blank=True)
     clientNomineeGuardianPanNo = models.CharField(max_length=500, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
@@ -540,37 +552,21 @@ class ClientUploadFileModel(models.Model):
     id = models.AutoField(primary_key=True)
     clientUploadFileId = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="clientUploadFileId",
                                            null=True, blank=True)
-    clientPaasPortSizePhoto = models.FileField(upload_to="clientPaasPortSizePhoto/", null=True, blank=True,
-                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
-    clientPanCardPhoto = models.FileField(upload_to="clientPanCardPhoto/", null=True, blank=True,
-                                          validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
-    clientAadharCard = models.FileField(upload_to="clientAadharCard/", null=True, blank=True,
-                                        validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
-    clientDrivingLicense = models.FileField(upload_to="clientDrivingLicense/", null=True, blank=True,
-                                            validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
-    clientVoterIDFrontImage = models.FileField(upload_to="clientVoterIDFrontImage/", null=True, blank=True,
-                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
-    clientVoterIDBackImage = models.FileField(upload_to="clientVoterIDBackImage/", null=True, blank=True,
-                                              validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
-    clientPassportFrontImage = models.FileField(upload_to="clientPassportFrontImage/", null=True, blank=True,
-                                                validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
-    clientPassportBackImage = models.FileField(upload_to="clientPassportBackImage/", null=True, blank=True,
-                                               validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
-    clientForeignAddressProof = models.FileField(upload_to="clientForeignAddressProof/", null=True, blank=True,
-                                                 validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
-    clientForeignTaxIdentificationProof = models.FileField(upload_to="clientForeignTaxIdentificationProof/", null=True,
-                                                           blank=True,
-                                                           validators=[
-                                                               FileExtensionValidator(allowed_extensions=["pdf"])])
-    clientCancelledChequeCopy = models.FileField(upload_to="clientCancelledChequeCopy/", null=True, blank=True,
-                                                 validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
-    clientBankAccountStatementOrPassbook = models.FileField(upload_to="clientBankAccountStatementOrPassbook/",
-                                                            null=True, blank=True,
-                                                            validators=[
-                                                                FileExtensionValidator(allowed_extensions=["pdf"])])
-    clientChildrenBirthCertificate = models.FileField(upload_to="clientChildrenBirthCertificate/", null=True,
-                                                      blank=True,
-                                                      validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
+    clientPaasPortSizePhoto = models.FileField(upload_to="clientPaasPortSizePhoto/", storage=UniqueFileStorage(),
+                                               null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientPanCardPhoto = models.FileField(upload_to="clientPanCardPhoto/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientAadharCard = models.FileField(upload_to="clientAadharCard/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientDrivingLicense = models.FileField(upload_to="clientDrivingLicense/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientVoterIDFrontImage = models.FileField(upload_to="clientVoterIDFrontImage/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientVoterIDBackImage = models.FileField(upload_to="clientVoterIDBackImage/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientPassportFrontImage = models.FileField(upload_to="clientPassportFrontImage/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientPassportBackImage = models.FileField(upload_to="clientPassportBackImage/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientForeignAddressProof = models.FileField(upload_to="clientForeignAddressProof/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientForeignTaxIdentificationProof = models.FileField(upload_to="clientForeignTaxIdentificationProof/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientCancelledChequeCopy = models.FileField(upload_to="clientCancelledChequeCopy/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientBankAccountStatementOrPassbook = models.FileField(upload_to="clientBankAccountStatementOrPassbook/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientChildrenBirthCertificate = models.FileField(upload_to="clientChildrenBirthCertificate/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientPowerOfAttorneyUpload = models.FileField(upload_to="clientPowerOfAttorneyUpload/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -618,8 +614,6 @@ class ClientPowerOfAttorneyModel(models.Model):
                                                 related_name="clientPowerOfAttorneyId", null=True, blank=True)
     clientPowerOfAttorneyName = models.CharField(max_length=500, null=True, blank=True)
     clientPowerOfAttorneyPanNo = models.CharField(max_length=500, null=True, blank=True)
-    clientPowerOfAttorneyUpload = models.FileField(upload_to="clientPowerOfAttorneyUpload/", null=True, blank=True,
-                                                   validators=[FileExtensionValidator(allowed_extensions=["pdf"])])
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -628,7 +622,7 @@ class ClientPowerOfAttorneyModel(models.Model):
 class ClientGuardianModel(models.Model):
     id = models.AutoField(primary_key=True)
     clientGuardianId = models.ForeignKey(ClientModel, on_delete=models.CASCADE,
-                                                related_name="clientGuardianId", null=True, blank=True)
+                                         related_name="clientGuardianId", null=True, blank=True)
     clientGuardianName = models.CharField(max_length=500, null=True, blank=True)
     clientGuardianRelation = models.ForeignKey(RelationshipModel, on_delete=models.CASCADE,
                                                related_name="clientGuardianRelation", null=True, blank=True)
