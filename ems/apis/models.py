@@ -151,8 +151,7 @@ class ArnEntryModel(models.Model):
 
 class AmcEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
-    amcAbbreviation = models.CharField(max_length=200, null=True, blank=True)
-    amcName = models.CharField(max_length=200, null=True, blank=True)
+    amcName = models.CharField(unique=True, max_length=200, null=True, blank=True)
     amcAddress = models.CharField(max_length=500, null=True, blank=True)
     amcState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="amcState", null=True, blank=True)
     amcCountry = CountryField(blank_label='(select country)', null=True, blank=True)
@@ -169,7 +168,7 @@ class AumEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
     aumArnNumber = models.ForeignKey(ArnEntryModel, on_delete=models.CASCADE, related_name="aumArnNumber", null=True,
                                      blank=True)
-    aumAmcAbbreviation = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="aumAmcAbbreviation",
+    aumAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="aumAmcName",
                                            null=True, blank=True)
     aumInvoiceNumber = models.CharField(max_length=200, null=True, blank=True)
     aumAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -183,8 +182,8 @@ class CommissionEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
     commissionArnNumber = models.ForeignKey(ArnEntryModel, on_delete=models.CASCADE, related_name="commissionArnNumber",
                                             null=True, blank=True)
-    commissionAmcAbbreviation = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE,
-                                                  related_name="commissionAmcAbbreviation", null=True, blank=True)
+    commissionAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE,
+                                                  related_name="commissionAmcName", null=True, blank=True)
     commissionAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     commissionMonth = models.CharField(max_length=7, help_text="Format: YYYY-MM")
     hideStatus = models.IntegerField(default=0)
@@ -194,8 +193,8 @@ class CommissionEntryModel(models.Model):
 
 class AumYoyGrowthEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
-    aumYoyGrowthAmcAbbreviation = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE,
-                                                    related_name="aumYoyGrowthAmcAbbreviation", null=True, blank=True)
+    aumYoyGrowthAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE,
+                                                    related_name="aumYoyGrowthAmcName", null=True, blank=True)
     aumYoyGrowthAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     aumYoyGrowthDate = models.DateField(null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
@@ -219,7 +218,7 @@ class GstEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
     gstInvoiceDate = models.DateField(null=True, blank=True)
     gstInvoiceNumber = models.CharField(max_length=200, null=True, blank=True)
-    gstAmcAbbreviation = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="gstAmcAbbreviation",
+    gstAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="gstAmcName",
                                            null=True, blank=True)
     gstTotalValue = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     gstTaxableValue = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -295,7 +294,8 @@ class CourierModel(models.Model):
 class CourierFileModel(models.Model):
     id = models.AutoField(primary_key=True)
     courier = models.ForeignKey(CourierModel, related_name='courier', on_delete=models.CASCADE)
-    courierFile = models.FileField(upload_to="courierFile/", null=True, blank=True,
+    courierFile = models.FileField(upload_to="courierFile/",
+                                   storage=UniqueFileStorage(),null=True, blank=True,
                                    validators=[FileExtensionValidator(allowed_extensions=["pdf", "doc", "docx"])])
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
@@ -309,7 +309,8 @@ class FormsModel(models.Model):
     formsType = models.ForeignKey(FormTypeModel, on_delete=models.CASCADE, related_name="formsType", null=True,
                                   blank=True)
     formsDescription = models.CharField(max_length=2500, null=True, blank=True)
-    formsFile = models.FileField(upload_to="formsFile/", null=True, blank=True,
+    formsFile = models.FileField(upload_to="formsFile/",
+                                 storage=UniqueFileStorage(), null=True, blank=True,
                                  validators=[FileExtensionValidator(
                                      allowed_extensions=['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv',
                                                          'txt'])])
@@ -324,9 +325,15 @@ class MarketingModel(models.Model):
                                          null=True, blank=True)
     marketingType = models.CharField(max_length=500, null=True, blank=True)
     marketingDescription = models.CharField(max_length=2500, null=True, blank=True)
-    marketingFile = models.FileField(upload_to="marketingFile/", null=True, blank=True,
-                                     validators=[FileExtensionValidator(allowed_extensions=[
-                                         'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt'])])
+    marketingFile = models.FileField(
+        upload_to="marketingFile/",
+        storage=UniqueFileStorage(),
+        null=True,
+        blank=True,
+        validators=[FileExtensionValidator(allowed_extensions=[
+            'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt', 'mp4'
+        ])]
+    )
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -340,7 +347,8 @@ class EmployeeModel(models.Model):
     employeePassword = models.CharField(max_length=500, null=True, blank=True)
     employeeAddress = models.CharField(max_length=2500, null=True, blank=True)
     employeeOtherDetail = models.CharField(max_length=2500, null=True, blank=True)
-    employeeFile = models.FileField(upload_to="employeeFile/", null=True, blank=True,
+    employeeFile = models.FileField(upload_to="employeeFile/",
+                                    storage=UniqueFileStorage(), null=True, blank=True,
                                     validators=[FileExtensionValidator(allowed_extensions=['pdf', 'jpg', 'jpeg'])])
     employeeUserType = models.ForeignKey(UserTypeModel, on_delete=models.CASCADE, related_name="employeeUserType",
                                          null=True, blank=True)

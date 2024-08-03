@@ -1,7 +1,4 @@
 import base64
-import uuid
-import os
-import logging
 import traceback
 from datetime import datetime
 from django.core.exceptions import ValidationError
@@ -14,8 +11,12 @@ from django_countries.fields import Country
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import *
+import urllib.parse
 from .serializers import *
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
+
 
 logger = logging.getLogger(__name__)
 
@@ -1124,10 +1125,11 @@ class FormsViewSet(viewsets.ModelViewSet):
     def listing(self, request, pk=None):
         if request.headers.get('token') != "":
             if pk == "0":
-                serializer = FormsModelSerializers(FormsModel.objects.filter(hideStatus=0).order_by('-id'), many=True)
+                queryset = FormsModel.objects.filter(hideStatus=0).order_by('-id')
             else:
-                serializer = FormsModelSerializers(FormsModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                                                   many=True)
+                queryset = FormsModel.objects.filter(hideStatus=0, id=pk).order_by('-id')
+
+            serializer = FormsModelSerializers(queryset, many=True, context={'request': request})
             response = {'code': 1, 'data': serializer.data, 'message': "All Retrieved"}
         else:
             response = {'code': 0, 'data': [], 'message': "Token is invalid"}
@@ -1164,15 +1166,21 @@ class MarketingViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        if request.headers.get('token') == "Token":  # Replace with proper token validation
             if pk == "0":
-                serializer = MarketingModelSerializers(MarketingModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                       many=True)
+                queryset = self.queryset.order_by('-id')
             else:
-                serializer = MarketingModelSerializers(
-                    MarketingModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+                queryset = self.queryset.filter(id=pk).order_by('-id')
+
+            serializer = self.serializer_class(queryset, many=True, context={'request': request})
+            data = serializer.data
+
+            # Add full URL to marketingFile
+            for item in data:
+                if item['marketingFile']:
+                    item['marketingFile'] = request.build_absolute_uri(item['marketingFile'])
+
+            response = {'code': 1, 'data': data, 'message': "All Retrieved"}
         else:
             response = {'code': 0, 'data': [], 'message': "Token is invalid"}
         return Response(response)
@@ -1199,6 +1207,38 @@ class MarketingViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         MarketingModel.objects.filter(id=pk).update(hideStatus='1')
         response = {'code': 1, 'message': "Done Successfully"}
+        return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def share_links(self, request, pk=None):
+        try:
+            marketing = MarketingModel.objects.get(id=pk, hideStatus=0)
+            file_url = request.build_absolute_uri(marketing.marketingFile.url)
+            title = f"Check out this marketing material: {marketing.marketingType}"
+
+            # WhatsApp sharing
+            whatsapp_link = f"https://api.whatsapp.com/send?text={urllib.parse.quote(title + ' ' + file_url)}"
+
+            # Telegram sharing
+            telegram_link = f"https://t.me/share/url?url={urllib.parse.quote(file_url)}&text={urllib.parse.quote(title)}"
+
+            # Facebook, YouTube, and Instagram don't support direct media sharing via URL
+            facebook_link = f"https://www.facebook.com/sharer/sharer.php?u={urllib.parse.quote(file_url)}"
+
+            response = {
+                'code': 1,
+                'data': {
+                    'whatsapp': whatsapp_link,
+                    'telegram': telegram_link,
+                    'facebook': facebook_link,
+                    'file_url': file_url,
+                    'title': title,
+                },
+                'message': "Share links generated successfully"
+            }
+        except MarketingModel.DoesNotExist:
+            response = {'code': 0, 'data': {}, 'message': "Marketing material not found"}
+
         return Response(response)
 
 

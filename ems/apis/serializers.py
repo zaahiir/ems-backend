@@ -105,7 +105,7 @@ class AmcEntryModelSerializers(CountryFieldMixin, serializers.ModelSerializer):
 
 class AumEntryModelSerializers(serializers.ModelSerializer):
     aumArnNumber = serializers.PrimaryKeyRelatedField(queryset=ArnEntryModel.objects.all())
-    aumAmcAbbreviation = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+    aumAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
 
     class Meta:
         model = AumEntryModel
@@ -115,13 +115,13 @@ class AumEntryModelSerializers(serializers.ModelSerializer):
         representation = super().to_representation(instance)
         representation['aumArnNumber'] = instance.aumArnNumber.arnNumber if instance.aumArnNumber else None
         representation[
-            'aumAmcAbbreviation'] = instance.aumAmcAbbreviation.amcAbbreviation if instance.aumAmcAbbreviation else None
+            'aumAmcName'] = instance.aumAmcName.amcName if instance.aumAmcName else None
         return representation
 
 
 class CommissionEntryModelSerializers(serializers.ModelSerializer):
     commissionArnNumber = serializers.PrimaryKeyRelatedField(queryset=ArnEntryModel.objects.all())
-    commissionAmcAbbreviation = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+    commissionAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
 
     class Meta:
         model = CommissionEntryModel
@@ -132,12 +132,12 @@ class CommissionEntryModelSerializers(serializers.ModelSerializer):
         representation[
             'commissionArnNumber'] = instance.commissionArnNumber.arnNumber if instance.commissionArnNumber else None
         representation[
-            'commissionAmcAbbreviation'] = instance.commissionAmcAbbreviation.amcAbbreviation if instance.commissionAmcAbbreviation else None
+            'commissionAmcName'] = instance.commissionAmcName.amcName if instance.commissionAmcName else None
         return representation
 
 
 class AumYoyGrowthEntryModelSerializers(serializers.ModelSerializer):
-    aumYoyGrowthAmcAbbreviation = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+    aumYoyGrowthAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
 
     class Meta:
         model = AumYoyGrowthEntryModel
@@ -146,7 +146,7 @@ class AumYoyGrowthEntryModelSerializers(serializers.ModelSerializer):
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation[
-            'aumYoyGrowthAmcAbbreviation'] = instance.aumYoyGrowthAmcAbbreviation.amcAbbreviation if instance.aumYoyGrowthAmcAbbreviation else None
+            'aumYoyGrowthAmcName'] = instance.aumYoyGrowthAmcName.amcName if instance.aumYoyGrowthAmcName else None
         return representation
 
 
@@ -164,7 +164,7 @@ class IndustryAumEntryModelSerializers(serializers.ModelSerializer):
 
 
 class GstEntryModelSerializers(serializers.ModelSerializer):
-    gstAmcAbbreviation = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+    gstAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
 
     class Meta:
         model = GstEntryModel
@@ -173,7 +173,7 @@ class GstEntryModelSerializers(serializers.ModelSerializer):
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation[
-            'gstAmcAbbreviation'] = instance.gstAmcAbbreviation.amcAbbreviation if instance.gstAmcAbbreviation else None
+            'gstAmcName'] = instance.gstAmcName.amcName if instance.gstAmcName else None
         return representation
 
 
@@ -186,7 +186,7 @@ class NavModelSerializers(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['navAmcName'] = instance.navAmcName.amcAbbreviation if instance.navAmcName else None
+        representation['navAmcName'] = instance.navAmcName.amcName if instance.navAmcName else None
         return representation
 
 
@@ -213,7 +213,7 @@ class StatementModelSerializers(serializers.ModelSerializer):
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation[
-            'statementAmcName'] = instance.statementAmcName.amcAbbreviation if instance.statementAmcName else None
+            'statementAmcName'] = instance.statementAmcName.amcName if instance.statementAmcName else None
         return representation
 
 
@@ -262,14 +262,7 @@ class CourierModelSerializers(serializers.ModelSerializer):
 class FormsModelSerializers(serializers.ModelSerializer):
     formsAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
     formsType = serializers.PrimaryKeyRelatedField(queryset=FormTypeModel.objects.all())
-    formsFile = serializers.FileField(
-        allow_empty_file=True,
-        use_url=False,
-        required=False,
-        validators=[FileExtensionValidator(allowed_extensions=[
-            'pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt'
-        ])]
-    )
+    formsFile = serializers.FileField(required=False)
 
     class Meta:
         model = FormsModel
@@ -277,20 +270,16 @@ class FormsModelSerializers(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['formsAmcName'] = instance.formsAmcName.amcAbbreviation if instance.formsAmcName else None
+        representation['formsAmcName'] = instance.formsAmcName.amcName if instance.formsAmcName else None
         representation['formsType'] = instance.formsType.formTypeName if instance.formsType else None
         if instance.formsFile:
-            representation['formsFile'] = instance.formsFile.url
+            representation['formsFile'] = self.context['request'].build_absolute_uri(instance.formsFile.url)
         return representation
 
 
 class MarketingModelSerializers(serializers.ModelSerializer):
     marketingAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
-    marketingFile = serializers.FileField(
-        validators=[FileExtensionValidator(
-            allowed_extensions=['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'xls', 'xlsx', 'csv', 'txt'])],
-        required=False
-    )
+    marketingFile = serializers.FileField(required=False)
 
     class Meta:
         model = MarketingModel
@@ -299,9 +288,9 @@ class MarketingModelSerializers(serializers.ModelSerializer):
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation[
-            'marketingAmcName'] = instance.marketingAmcName.amcAbbreviation if instance.marketingAmcName else None
+            'marketingAmcName'] = instance.marketingAmcName.amcName if instance.marketingAmcName else None
         if instance.marketingFile:
-            representation['marketingFile'] = instance.marketingFile.url
+            representation['marketingFile'] = self.context['request'].build_absolute_uri(instance.marketingFile.url)
         return representation
 
 
@@ -325,6 +314,7 @@ class EmployeeModelSerializers(serializers.ModelSerializer):
 
 
 class ClientModelSerializers(serializers.ModelSerializer):
+
     class Meta:
         model = ClientModel
         fields = '__all__'
@@ -343,30 +333,35 @@ class ClientChildrenDetailModelSerializers(serializers.ModelSerializer):
 
 
 class ClientPresentAddressModelSerializers(serializers.ModelSerializer):
+
     class Meta:
         model = ClientPresentAddressModel
         fields = '__all__'
 
 
 class ClientPermanentAddressModelSerializers(serializers.ModelSerializer):
+
     class Meta:
         model = ClientPermanentAddressModel
         fields = '__all__'
 
 
 class ClientOfficeAddressModelSerializers(serializers.ModelSerializer):
+
     class Meta:
         model = ClientOfficeAddressModel
         fields = '__all__'
 
 
 class ClientOverseasAddressModelSerializers(serializers.ModelSerializer):
+
     class Meta:
         model = ClientOverseasAddressModel
         fields = '__all__'
 
 
 class ClientNomineeModelSerializers(serializers.ModelSerializer):
+
     class Meta:
         model = ClientNomineeModel
         fields = '__all__'
@@ -447,6 +442,7 @@ class ClientUploadFileModelSerializers(serializers.ModelSerializer):
 
 
 class ClientBankModelSerializers(serializers.ModelSerializer):
+
     class Meta:
         model = ClientBankModel
         fields = '__all__'
