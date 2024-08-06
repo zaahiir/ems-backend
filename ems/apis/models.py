@@ -4,6 +4,7 @@ from django.db import models
 import os
 import uuid
 from django.core.files.storage import FileSystemStorage
+from django.contrib.auth.hashers import make_password, check_password
 
 
 class UniqueFileStorage(FileSystemStorage):
@@ -356,6 +357,18 @@ class EmployeeModel(models.Model):
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
 
+    def set_password(self, raw_password):
+        # Hash the password and set it
+        self.employeePassword = make_password(raw_password)
+        self.save(update_fields=['employeePassword'])
+
+    def check_password(self, raw_password):
+        # Verify the password
+        return check_password(raw_password, self.employeePassword)
+
+    def __str__(self):
+        return self.employeeEmail
+
 
 class ClientModel(models.Model):
     id = models.AutoField(primary_key=True)
@@ -391,6 +404,9 @@ class ClientModel(models.Model):
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.clientPanNo
 
 
 class ClientFamilyDetailModel(models.Model):

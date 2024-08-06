@@ -5,17 +5,19 @@ from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
-from django.http import JsonResponse
 from django_countries import countries
 from django_countries.fields import Country
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
+from django.contrib.auth.hashers import check_password, make_password
 import urllib.parse
+from .models import EmployeeModel, ClientModel
 from .serializers import *
 from django.http import JsonResponse
-from django.views.decorators.http import require_POST
-from django.views.decorators.csrf import csrf_exempt
+from datetime import datetime
 
 
 logger = logging.getLogger(__name__)
@@ -29,15 +31,75 @@ class CustomJSONEncoder(DjangoJSONEncoder):
 
 
 # Create your views here.
+class UserViewSet(viewsets.ViewSet):
+    @action(detail=False, methods=['post'])
+    def login(self, request):
+        username = request.data.get('username')
+        password = request.data.get('password')
+        dob = request.data.get('dob')
+
+        logger.debug(f"Login attempt for username: {username}")
+
+        if not username:
+            return Response({"detail": "Username is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check Employee credentials
+        employee = EmployeeModel.objects.filter(employeeEmail=username).first()
+        if employee:
+            logger.debug(f"Employee found: {employee.employeeEmail}")
+            if not password:
+                return Response({"detail": "Password is required for employee login"},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            if employee.check_password(password):
+                logger.debug("Password check successful")
+                refresh = RefreshToken.for_user(employee)
+                return Response({
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token),
+                    'user_type': 'employee',
+                    'user_id': employee.id,
+                    'name': employee.employeeName,
+                    'email': employee.employeeEmail,
+                    'user_type_id': employee.employeeUserType.id if employee.employeeUserType else None,
+                    'user_type_name': employee.employeeUserType.userTypeName if employee.employeeUserType else None,
+                }, status=status.HTTP_200_OK)
+            else:
+                logger.debug("Password check failed")
+                return Response({"detail": "Invalid password for employee"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # Check Client credentials
+        if not dob:
+            return Response({"detail": "Date of Birth is required for client login"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            dob_date = datetime.strptime(dob, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({"detail": "Invalid date format. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = ClientModel.objects.filter(clientPanNo=username, clientDateOfBirth=dob_date).first()
+        if client:
+            refresh = RefreshToken.for_user(client)
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user_type': 'client',
+                'user_id': client.id,
+                'name': client.clientName,
+                'email': client.clientEmail,
+            }, status=status.HTTP_200_OK)
+
+        return Response({"detail": "No user found with provided credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 class UserTypeViewSet(viewsets.ModelViewSet):
     queryset = UserTypeModel.objects.filter(hideStatus=0)
     serializer_class = UserTypeModelSerializers
+    # permission_classes = [IsAuthenticated] # Ensure only authenticated users can access these views
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        if request.headers.get('token'):
             if pk == "0":
                 serializer = UserTypeModelSerializers(UserTypeModel.objects.filter(hideStatus=0).order_by('-id'),
                                                       many=True)
@@ -51,7 +113,7 @@ class UserTypeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        if request.headers.get('token'):
             if pk == "0":
                 serializer = UserTypeModelSerializers(data=request.data)
             else:
@@ -67,8 +129,12 @@ class UserTypeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        UserTypeModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            UserTypeModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
@@ -1290,6 +1356,7 @@ class TaskViewSet(viewsets.ModelViewSet):
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = EmployeeModel.objects.filter(hideStatus=0)
     serializer_class = EmployeeModelSerializers
+    # permission_classes = [IsAuthenticated]  # Ensure only authenticated users can access these views
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
@@ -1307,33 +1374,57 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        token = request.headers.get('token', '')
+        if token:
             if pk == "0":
                 serializer = EmployeeModelSerializers(data=request.data)
+                if serializer.is_valid():
+                    # Save new instance first
+                    employee_instance = serializer.save()
+                    # Hash the password if provided
+                    raw_password = request.data.get('employeePassword', None)
+                    if raw_password:
+                        employee_instance.set_password(raw_password)
+                        employee_instance.save()  # Save updated instance with hashed password
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
             else:
-                serializer = EmployeeModelSerializers(instance=EmployeeModel.objects.get(id=pk), data=request.data)
-                print("one")
-            if serializer.is_valid():
-                print("two")
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                print("Serializer errors:", serializer.errors)
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                try:
+                    employee_instance = EmployeeModel.objects.get(id=pk)
+                except EmployeeModel.DoesNotExist:
+                    return Response({'code': 0, 'message': "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+                serializer = EmployeeModelSerializers(instance=employee_instance, data=request.data, partial=True)
+                if serializer.is_valid():
+                    serializer.save()  # Save instance first
+                    # Hash the password if provided
+                    raw_password = request.data.get('employeePassword', None)
+                    if raw_password:
+                        employee_instance.set_password(raw_password)
+                        employee_instance.save()  # Save updated instance with hashed password
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        EmployeeModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            EmployeeModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientViewSet(viewsets.ModelViewSet):
     queryset = ClientModel.objects.filter(hideStatus=0)
     serializer_class = ClientModelSerializers
+    # permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['GET'])
     def countries(self, request):
@@ -1627,6 +1718,10 @@ class ClientViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
         try:
+            user = request.user
+            if not user.is_authenticated:
+                return Response({'code': 0, 'message': "Unauthorized access"}, status=401)
+
             with transaction.atomic():
                 client = ClientModel.objects.get(id=pk)
 
@@ -1635,7 +1730,6 @@ class ClientViewSet(viewsets.ModelViewSet):
                 client.save()
 
                 # Update hideStatus for related models
-                # Note: You'll need to add the hideStatus field to these models if it doesn't exist
                 ClientFamilyDetailModel.objects.filter(clientFamilyDetailId=client).update(hideStatus='1')
                 ClientChildrenDetailModel.objects.filter(clientChildrenId=client).update(hideStatus='1')
                 ClientPresentAddressModel.objects.filter(clientPresentAddressId=client).update(hideStatus='1')
