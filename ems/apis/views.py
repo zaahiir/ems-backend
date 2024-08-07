@@ -1,6 +1,5 @@
 import base64
 import traceback
-from datetime import datetime
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.serializers.json import DjangoJSONEncoder
@@ -10,15 +9,13 @@ from django_countries.fields import Country
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.contrib.auth import authenticate
 from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
-from django.contrib.auth.hashers import check_password, make_password
+from rest_framework_simplejwt.tokens import RefreshToken
 import urllib.parse
-from .models import EmployeeModel, ClientModel
 from .serializers import *
 from django.http import JsonResponse
 from datetime import datetime
-
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +39,19 @@ class UserViewSet(viewsets.ViewSet):
 
         if not username:
             return Response({"detail": "Username is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Authenticate superuser
+        user = authenticate(username=username, password=password)
+        if user and user.is_superuser:
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+                'user_type': 'superuser',
+                'user_id': user.id,
+                'username': user.username,
+                'email': user.email,
+            }, status=status.HTTP_200_OK)
 
         # Check Employee credentials
         employee = EmployeeModel.objects.filter(employeeEmail=username).first()
@@ -70,7 +80,8 @@ class UserViewSet(viewsets.ViewSet):
 
         # Check Client credentials
         if not dob:
-            return Response({"detail": "Date of Birth is required for client login"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Date of Birth is required for client login"},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         try:
             dob_date = datetime.strptime(dob, '%Y-%m-%d').date()
@@ -95,11 +106,12 @@ class UserViewSet(viewsets.ViewSet):
 class UserTypeViewSet(viewsets.ModelViewSet):
     queryset = UserTypeModel.objects.filter(hideStatus=0)
     serializer_class = UserTypeModelSerializers
-    # permission_classes = [IsAuthenticated] # Ensure only authenticated users can access these views
+    permission_classes = [IsAuthenticated]  # Ensure only authenticated users can access these views
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers.get('token'):
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = UserTypeModelSerializers(UserTypeModel.objects.filter(hideStatus=0).order_by('-id'),
                                                       many=True)
@@ -113,7 +125,8 @@ class UserTypeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers.get('token'):
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = UserTypeModelSerializers(data=request.data)
             else:
@@ -141,10 +154,12 @@ class UserTypeViewSet(viewsets.ModelViewSet):
 class StateViewSet(viewsets.ModelViewSet):
     queryset = StateModel.objects.filter(hideStatus=0)
     serializer_class = StateModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers.get('token'):
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 states = StateModel.objects.filter(hideStatus=0).order_by('-id')
             else:
@@ -157,7 +172,8 @@ class StateViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers.get('token'):
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = StateModelSerializers(data=request.data)
             else:
@@ -174,18 +190,24 @@ class StateViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        StateModel.objects.filter(id=pk).update(hideStatus=1)
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            StateModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ModeViewSet(viewsets.ModelViewSet):
     queryset = ModeModel.objects.filter(hideStatus=0)
     serializer_class = ModeModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers.get('token'):
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 modes = ModeModel.objects.filter(hideStatus=0).order_by('-id')
             else:
@@ -198,7 +220,8 @@ class ModeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers.get('token'):
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ModeModelSerializers(data=request.data)
             else:
@@ -215,18 +238,24 @@ class ModeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ModeModel.objects.filter(id=pk).update(hideStatus=1)
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ModeModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class IssueTypeViewSet(viewsets.ModelViewSet):
     queryset = IssueTypeModel.objects.filter(hideStatus=0)
     serializer_class = IssueTypeModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = IssueTypeModelSerializers(IssueTypeModel.objects.filter(hideStatus=0).order_by('-id'),
                                                        many=True)
@@ -241,7 +270,8 @@ class IssueTypeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = IssueTypeModelSerializers(data=request.data)
             else:
@@ -257,18 +287,24 @@ class IssueTypeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        IssueTypeModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            IssueTypeModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class FormTypeViewSet(viewsets.ModelViewSet):
     queryset = FormTypeModel.objects.filter(hideStatus=0)
     serializer_class = FormTypeModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = FormTypeModelSerializers(FormTypeModel.objects.filter(hideStatus=0).order_by('-id'),
                                                       many=True)
@@ -283,7 +319,8 @@ class FormTypeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = FormTypeModelSerializers(data=request.data)
             else:
@@ -299,18 +336,24 @@ class FormTypeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        FormTypeModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            FormTypeModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class GstTypeViewSet(viewsets.ModelViewSet):
     queryset = GstTypeModel.objects.filter(hideStatus=0)
     serializer_class = GstTypeModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = GstTypeModelSerializers(GstTypeModel.objects.filter(hideStatus=0).order_by('-id'),
                                                      many=True)
@@ -325,7 +368,8 @@ class GstTypeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = GstTypeModelSerializers(data=request.data)
             else:
@@ -341,18 +385,24 @@ class GstTypeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        GstTypeModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            GstTypeModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class GenderViewSet(viewsets.ModelViewSet):
     queryset = GenderModel.objects.filter(hideStatus=0)
     serializer_class = GenderModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = GenderModelSerializers(GenderModel.objects.filter(hideStatus=0).order_by('-id'),
                                                     many=True)
@@ -366,7 +416,8 @@ class GenderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = GenderModelSerializers(data=request.data)
             else:
@@ -382,18 +433,24 @@ class GenderViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        GenderModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            GenderModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class MaritalStatusViewSet(viewsets.ModelViewSet):
     queryset = MaritalStatusModel.objects.filter(hideStatus=0)
     serializer_class = MaritalStatusModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = MaritalStatusModelSerializers(
                     MaritalStatusModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -409,7 +466,8 @@ class MaritalStatusViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = MaritalStatusModelSerializers(data=request.data)
             else:
@@ -426,18 +484,24 @@ class MaritalStatusViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        MaritalStatusModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            MaritalStatusModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class PoliticallyExposedPersonViewSet(viewsets.ModelViewSet):
     queryset = PoliticallyExposedPersonModel.objects.filter(hideStatus=0)
     serializer_class = PoliticallyExposedPersonModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = PoliticallyExposedPersonModelSerializers(
                     PoliticallyExposedPersonModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -453,7 +517,8 @@ class PoliticallyExposedPersonViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = PoliticallyExposedPersonModelSerializers(data=request.data)
             else:
@@ -470,18 +535,24 @@ class PoliticallyExposedPersonViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        PoliticallyExposedPersonModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            PoliticallyExposedPersonModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class BankNameViewSet(viewsets.ModelViewSet):
     queryset = BankNameModel.objects.filter(hideStatus=0)
     serializer_class = BankNameModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = BankNameModelSerializers(BankNameModel.objects.filter(hideStatus=0).order_by('-id'),
                                                       many=True)
@@ -495,7 +566,8 @@ class BankNameViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = BankNameModelSerializers(data=request.data)
             else:
@@ -511,18 +583,24 @@ class BankNameViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        BankNameModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            BankNameModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class RelationshipViewSet(viewsets.ModelViewSet):
     queryset = RelationshipModel.objects.filter(hideStatus=0)
     serializer_class = RelationshipModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = RelationshipModelSerializers(
                     RelationshipModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -538,7 +616,8 @@ class RelationshipViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = RelationshipModelSerializers(data=request.data)
             else:
@@ -555,18 +634,24 @@ class RelationshipViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        RelationshipModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            RelationshipModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class AccountTypeViewSet(viewsets.ModelViewSet):
     queryset = AccountTypeModel.objects.filter(hideStatus=0)
     serializer_class = AccountTypeModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = AccountTypeModelSerializers(
                     AccountTypeModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -582,7 +667,8 @@ class AccountTypeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = AccountTypeModelSerializers(data=request.data)
             else:
@@ -599,18 +685,24 @@ class AccountTypeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        AccountTypeModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            AccountTypeModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class AccountPreferenceViewSet(viewsets.ModelViewSet):
     queryset = AccountPreferenceModel.objects.filter(hideStatus=0)
     serializer_class = AccountPreferenceModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = AccountPreferenceModelSerializers(
                     AccountPreferenceModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -626,7 +718,8 @@ class AccountPreferenceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = AccountPreferenceModelSerializers(data=request.data)
             else:
@@ -643,14 +736,19 @@ class AccountPreferenceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        AccountPreferenceModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            AccountPreferenceModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ArnEntryViewSet(viewsets.ModelViewSet):
     queryset = ArnEntryModel.objects.filter(hideStatus=0)
     serializer_class = ArnEntryModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['GET'])
     def countries(self, request):
@@ -659,7 +757,8 @@ class ArnEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ArnEntryModelSerializers(ArnEntryModel.objects.filter(hideStatus=0).order_by('-id'),
                                                       many=True)
@@ -673,7 +772,8 @@ class ArnEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ArnEntryModelSerializers(data=request.data)
             else:
@@ -689,14 +789,19 @@ class ArnEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ArnEntryModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ArnEntryModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class AmcEntryViewSet(viewsets.ModelViewSet):
     queryset = AmcEntryModel.objects.filter(hideStatus=0)
     serializer_class = AmcEntryModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['GET'])
     def countries(self, request):
@@ -705,7 +810,8 @@ class AmcEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = AmcEntryModelSerializers(AmcEntryModel.objects.filter(hideStatus=0).order_by('-id'),
                                                       many=True)
@@ -719,7 +825,8 @@ class AmcEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = AmcEntryModelSerializers(data=request.data)
             else:
@@ -740,18 +847,24 @@ class AmcEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        AmcEntryModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            AmcEntryModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class AumEntryViewSet(viewsets.ModelViewSet):
     queryset = AumEntryModel.objects.filter(hideStatus=0)
     serializer_class = AumEntryModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = AumEntryModelSerializers(AumEntryModel.objects.filter(hideStatus=0).order_by('-id'),
                                                       many=True)
@@ -765,7 +878,8 @@ class AumEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             data = request.data.copy()
 
             # Ensure aumMonth is in YYYY-MM format
@@ -791,18 +905,24 @@ class AumEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        AumEntryModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            AumEntryModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class CommissionEntryViewSet(viewsets.ModelViewSet):
     queryset = CommissionEntryModel.objects.filter(hideStatus=0)
     serializer_class = CommissionEntryModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = CommissionEntryModelSerializers(
                     CommissionEntryModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -818,7 +938,8 @@ class CommissionEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             data = request.data.copy()
 
             # Ensure aumMonth is in YYYY-MM format
@@ -844,18 +965,24 @@ class CommissionEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        CommissionEntryModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            CommissionEntryModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class AumYoyGrowthEntryViewSet(viewsets.ModelViewSet):
     queryset = AumYoyGrowthEntryModel.objects.filter(hideStatus=0)
     serializer_class = AumYoyGrowthEntryModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = AumYoyGrowthEntryModelSerializers(
                     AumYoyGrowthEntryModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -871,7 +998,8 @@ class AumYoyGrowthEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = AumYoyGrowthEntryModelSerializers(data=request.data)
             else:
@@ -881,7 +1009,6 @@ class AumYoyGrowthEntryViewSet(viewsets.ModelViewSet):
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
-                print(serializer.errors)
                 response = {'code': 0, 'message': "Unable to Process Request"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
@@ -889,18 +1016,24 @@ class AumYoyGrowthEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        AumYoyGrowthEntryModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            AumYoyGrowthEntryModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class IndustryAumEntryViewSet(viewsets.ModelViewSet):
     queryset = IndustryAumEntryModel.objects.filter(hideStatus=0)
     serializer_class = IndustryAumEntryModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = IndustryAumEntryModelSerializers(
                     IndustryAumEntryModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -916,7 +1049,8 @@ class IndustryAumEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = IndustryAumEntryModelSerializers(data=request.data)
             else:
@@ -934,18 +1068,24 @@ class IndustryAumEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        IndustryAumEntryModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            IndustryAumEntryModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class GstEntryViewSet(viewsets.ModelViewSet):
     queryset = GstEntryModel.objects.filter(hideStatus=0)
     serializer_class = GstEntryModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = GstEntryModelSerializers(GstEntryModel.objects.filter(hideStatus=0).order_by('-id'),
                                                       many=True)
@@ -959,7 +1099,8 @@ class GstEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = GstEntryModelSerializers(data=request.data)
             else:
@@ -975,18 +1116,24 @@ class GstEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        GstEntryModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            GstEntryModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class NavViewSet(viewsets.ModelViewSet):
     queryset = NavModel.objects.filter(hideStatus=0)
     serializer_class = NavModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = NavModelSerializers(NavModel.objects.filter(hideStatus=0).order_by('-id'),
                                                  many=True)
@@ -1000,7 +1147,8 @@ class NavViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = NavModelSerializers(data=request.data)
             else:
@@ -1017,18 +1165,24 @@ class NavViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        NavModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            NavModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class IssueViewSet(viewsets.ModelViewSet):
     queryset = IssueModel.objects.filter(hideStatus=0)
     serializer_class = IssueModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = IssueModelSerializers(IssueModel.objects.filter(hideStatus=0).order_by('-id'),
                                                    many=True)
@@ -1042,7 +1196,8 @@ class IssueViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = IssueModelSerializers(data=request.data)
             else:
@@ -1058,18 +1213,24 @@ class IssueViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        IssueModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            IssueModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class StatementViewSet(viewsets.ModelViewSet):
     queryset = StatementModel.objects.filter(hideStatus=0)
     serializer_class = StatementModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = StatementModelSerializers(StatementModel.objects.filter(hideStatus=0).order_by('-id'),
                                                        many=True)
@@ -1084,7 +1245,8 @@ class StatementViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = StatementModelSerializers(data=request.data)
             else:
@@ -1100,18 +1262,24 @@ class StatementViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        StatementModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            StatementModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class CourierViewSet(viewsets.ModelViewSet):
     queryset = CourierModel.objects.filter(hideStatus=0)
     serializer_class = CourierModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = CourierModelSerializers(CourierModel.objects.filter(hideStatus=0).order_by('-id'),
                                                      many=True)
@@ -1125,7 +1293,8 @@ class CourierViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers.get('token') != "":
+        user = request.user
+        if user.is_authenticated:
             try:
                 with transaction.atomic():
                     if pk == "0":
@@ -1150,18 +1319,24 @@ class CourierViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        CourierModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            CourierModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class CourierFileViewSet(viewsets.ModelViewSet):
     queryset = CourierFileModel.objects.filter(hideStatus=0)
     serializer_class = CourierFileModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers.get('token') != "":
+        user = request.user
+        if user.is_authenticated:
             files = CourierFileModel.objects.filter(courier_id=pk, hideStatus=0)
             serializer = CourierFileModelSerializers(files, many=True)
             response = {'code': 1, 'data': serializer.data, 'message': "All Files Retrieved"}
@@ -1171,25 +1346,31 @@ class CourierFileViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        try:
-            file = CourierFileModel.objects.get(id=pk)
-            file.hideStatus = '1'
-            file.save()
-            response = {'code': 1, 'message': "File Deleted Successfully"}
-        except CourierFileModel.DoesNotExist:
-            response = {'code': 0, 'message': "File not found"}
-        except Exception as e:
-            response = {'code': 0, 'message': str(e)}
+        user = request.user
+        if user.is_authenticated:
+            try:
+                file = CourierFileModel.objects.get(id=pk)
+                file.hideStatus = 1
+                file.save()
+                response = {'code': 1, 'message': "File Deleted Successfully"}
+            except CourierFileModel.DoesNotExist:
+                response = {'code': 0, 'message': "File not found"}
+            except Exception as e:
+                response = {'code': 0, 'message': str(e)}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class FormsViewSet(viewsets.ModelViewSet):
     queryset = FormsModel.objects.filter(hideStatus=0)
     serializer_class = FormsModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers.get('token') != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 queryset = FormsModel.objects.filter(hideStatus=0).order_by('-id')
             else:
@@ -1203,7 +1384,8 @@ class FormsViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers.get('token') != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = FormsModelSerializers(data=request.data)
             else:
@@ -1221,18 +1403,24 @@ class FormsViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        FormsModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            FormsModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class MarketingViewSet(viewsets.ModelViewSet):
     queryset = MarketingModel.objects.filter(hideStatus=0)
     serializer_class = MarketingModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers.get('token') == "Token":  # Replace with proper token validation
+        user = request.user
+        if user.is_authenticated:  # Replace with proper token validation
             if pk == "0":
                 queryset = self.queryset.order_by('-id')
             else:
@@ -1253,7 +1441,8 @@ class MarketingViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers.get('token') != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = MarketingModelSerializers(data=request.data)
             else:
@@ -1271,39 +1460,47 @@ class MarketingViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        MarketingModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            MarketingModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
     @action(detail=True, methods=['GET'])
     def share_links(self, request, pk=None):
-        try:
-            marketing = MarketingModel.objects.get(id=pk, hideStatus=0)
-            file_url = request.build_absolute_uri(marketing.marketingFile.url)
-            title = f"Check out this marketing material: {marketing.marketingType}"
+        user = request.user
+        if user.is_authenticated:
+            try:
+                marketing = MarketingModel.objects.get(id=pk, hideStatus=0)
+                file_url = request.build_absolute_uri(marketing.marketingFile.url)
+                title = f"Check out this marketing material: {marketing.marketingType}"
 
-            # WhatsApp sharing
-            whatsapp_link = f"https://api.whatsapp.com/send?text={urllib.parse.quote(title + ' ' + file_url)}"
+                # WhatsApp sharing
+                whatsapp_link = f"https://api.whatsapp.com/send?text={urllib.parse.quote(title + ' ' + file_url)}"
 
-            # Telegram sharing
-            telegram_link = f"https://t.me/share/url?url={urllib.parse.quote(file_url)}&text={urllib.parse.quote(title)}"
+                # Telegram sharing
+                telegram_link = f"https://t.me/share/url?url={urllib.parse.quote(file_url)}&text={urllib.parse.quote(title)}"
 
-            # Facebook, YouTube, and Instagram don't support direct media sharing via URL
-            facebook_link = f"https://www.facebook.com/sharer/sharer.php?u={urllib.parse.quote(file_url)}"
+                # Facebook sharing
+                facebook_link = f"https://www.facebook.com/sharer/sharer.php?u={urllib.parse.quote(file_url)}"
 
-            response = {
-                'code': 1,
-                'data': {
-                    'whatsapp': whatsapp_link,
-                    'telegram': telegram_link,
-                    'facebook': facebook_link,
-                    'file_url': file_url,
-                    'title': title,
-                },
-                'message': "Share links generated successfully"
-            }
-        except MarketingModel.DoesNotExist:
-            response = {'code': 0, 'data': {}, 'message': "Marketing material not found"}
+                response = {
+                    'code': 1,
+                    'data': {
+                        'whatsapp': whatsapp_link,
+                        'telegram': telegram_link,
+                        'facebook': facebook_link,
+                        'file_url': file_url,
+                        'title': title,
+                    },
+                    'message': "Share links generated successfully"
+                }
+            except MarketingModel.DoesNotExist:
+                response = {'code': 0, 'data': {}, 'message': "Marketing material not found"}
+        else:
+            response = {'code': 0, 'data': {}, 'message': "Unauthorized access"}
 
         return Response(response)
 
@@ -1311,10 +1508,12 @@ class MarketingViewSet(viewsets.ModelViewSet):
 class TaskViewSet(viewsets.ModelViewSet):
     queryset = TaskModel.objects.filter(hideStatus=0)
     serializer_class = TaskModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = TaskModelSerializers(TaskModel.objects.filter(hideStatus=0).order_by('-id'),
                                                   many=True)
@@ -1328,19 +1527,16 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
-            print("Received data:", request.data)  # Debug print
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = TaskModelSerializers(data=request.data)
             else:
                 serializer = TaskModelSerializers(instance=TaskModel.objects.get(id=pk), data=request.data)
             if serializer.is_valid():
-                print("Validated data:", serializer.validated_data)  # Debug print
                 serializer.save()
-                print("Saved task:", serializer.__dict__)  # Debug print
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
-                print("Serializer errors:", serializer.errors)  # Debug print
                 response = {'code': 0, 'message': "Unable to Process Request"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
@@ -1348,19 +1544,24 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        TaskModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            TaskModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = EmployeeModel.objects.filter(hideStatus=0)
     serializer_class = EmployeeModelSerializers
-    # permission_classes = [IsAuthenticated]  # Ensure only authenticated users can access these views
+    permission_classes = [IsAuthenticated]  # Ensure only authenticated users can access these views
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = EmployeeModelSerializers(EmployeeModel.objects.filter(hideStatus=0).order_by('-id'),
                                                       many=True)
@@ -1374,8 +1575,8 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        token = request.headers.get('token', '')
-        if token:
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = EmployeeModelSerializers(data=request.data)
                 if serializer.is_valid():
@@ -1424,7 +1625,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 class ClientViewSet(viewsets.ModelViewSet):
     queryset = ClientModel.objects.filter(hideStatus=0)
     serializer_class = ClientModelSerializers
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['GET'])
     def countries(self, request):
@@ -1433,7 +1634,8 @@ class ClientViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers.get('token'):
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientModelSerializers(ClientModel.objects.filter(hideStatus=0).order_by('-id'), many=True)
             else:
@@ -1446,7 +1648,8 @@ class ClientViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def listing_client(self, request, pk=None):
-        if request.headers.get('token'):
+        user = request.user
+        if user.is_authenticated:
             try:
                 client = ClientModelSerializers(ClientModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
                                                 many=True)
@@ -1527,7 +1730,8 @@ class ClientViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['POST'])
     @transaction.atomic
     def processing(self, request, pk=None):
-        if request.headers.get('token'):
+        user = request.user
+        if user.is_authenticated:
             try:
                 with transaction.atomic():
                     # Process main client data
@@ -1756,10 +1960,12 @@ class ClientViewSet(viewsets.ModelViewSet):
 class ClientFamilyDetailViewSet(viewsets.ModelViewSet):
     queryset = ClientFamilyDetailModel.objects.filter(hideStatus=0)
     serializer_class = ClientFamilyDetailModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientFamilyDetailModelSerializers(
                     ClientFamilyDetailModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -1775,7 +1981,8 @@ class ClientFamilyDetailViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientFamilyDetailModelSerializers(data=request.data)
             else:
@@ -1792,18 +1999,24 @@ class ClientFamilyDetailViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientFamilyDetailModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientFamilyDetailModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientChildrenDetailViewSet(viewsets.ModelViewSet):
     queryset = ClientChildrenDetailModel.objects.filter(hideStatus=0)
     serializer_class = ClientChildrenDetailModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientChildrenDetailModelSerializers(
                     ClientChildrenDetailModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -1819,7 +2032,8 @@ class ClientChildrenDetailViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientChildrenDetailModelSerializers(data=request.data)
             else:
@@ -1836,18 +2050,24 @@ class ClientChildrenDetailViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientChildrenDetailModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientChildrenDetailModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientPresentAddressViewSet(viewsets.ModelViewSet):
     queryset = ClientPresentAddressModel.objects.filter(hideStatus=0)
     serializer_class = ClientPresentAddressModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientPresentAddressModelSerializers(
                     ClientPresentAddressModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -1863,7 +2083,8 @@ class ClientPresentAddressViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientPresentAddressModelSerializers(data=request.data)
             else:
@@ -1880,18 +2101,24 @@ class ClientPresentAddressViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientPresentAddressModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientPresentAddressModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientPermanentAddressViewSet(viewsets.ModelViewSet):
     queryset = ClientPermanentAddressModel.objects.filter(hideStatus=0)
     serializer_class = ClientPermanentAddressModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientPermanentAddressModelSerializers(
                     ClientPermanentAddressModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -1907,7 +2134,8 @@ class ClientPermanentAddressViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientPermanentAddressModelSerializers(data=request.data)
             else:
@@ -1924,18 +2152,24 @@ class ClientPermanentAddressViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientPermanentAddressModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientPermanentAddressModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientOfficeAddressViewSet(viewsets.ModelViewSet):
     queryset = ClientOfficeAddressModel.objects.filter(hideStatus=0)
     serializer_class = ClientOfficeAddressModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientOfficeAddressModelSerializers(
                     ClientOfficeAddressModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -1951,7 +2185,8 @@ class ClientOfficeAddressViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientOfficeAddressModelSerializers(data=request.data)
             else:
@@ -1968,18 +2203,24 @@ class ClientOfficeAddressViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientOfficeAddressModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientOfficeAddressModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientOverseasAddressViewSet(viewsets.ModelViewSet):
     queryset = ClientOverseasAddressModel.objects.filter(hideStatus=0)
     serializer_class = ClientOverseasAddressModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientOverseasAddressModelSerializers(
                     ClientOverseasAddressModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -1995,7 +2236,8 @@ class ClientOverseasAddressViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientOverseasAddressModelSerializers(data=request.data)
             else:
@@ -2012,18 +2254,24 @@ class ClientOverseasAddressViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientOverseasAddressModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientOverseasAddressModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientNomineeViewSet(viewsets.ModelViewSet):
     queryset = ClientNomineeModel.objects.filter(hideStatus=0)
     serializer_class = ClientNomineeModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientNomineeModelSerializers(
                     ClientNomineeModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -2039,7 +2287,8 @@ class ClientNomineeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientNomineeModelSerializers(data=request.data)
             else:
@@ -2056,18 +2305,24 @@ class ClientNomineeViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientNomineeModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientNomineeModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientMedicalInsuranceViewSet(viewsets.ModelViewSet):
     queryset = ClientMedicalInsuranceModel.objects.filter(hideStatus=0)
     serializer_class = ClientMedicalInsuranceModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientMedicalInsuranceModelSerializers(
                     ClientMedicalInsuranceModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -2083,7 +2338,8 @@ class ClientMedicalInsuranceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientMedicalInsuranceModelSerializers(data=request.data)
             else:
@@ -2100,18 +2356,24 @@ class ClientMedicalInsuranceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientMedicalInsuranceModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientMedicalInsuranceModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientTermInsuranceViewSet(viewsets.ModelViewSet):
     queryset = ClientTermInsuranceModel.objects.filter(hideStatus=0)
     serializer_class = ClientTermInsuranceModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientTermInsuranceModelSerializers(
                     ClientTermInsuranceModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -2127,7 +2389,8 @@ class ClientTermInsuranceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientTermInsuranceModelSerializers(data=request.data)
             else:
@@ -2144,18 +2407,24 @@ class ClientTermInsuranceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientTermInsuranceModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientTermInsuranceModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientUploadFileViewSet(viewsets.ModelViewSet):
     queryset = ClientUploadFileModel.objects.filter(hideStatus=0)
     serializer_class = ClientUploadFileModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientUploadFileModelSerializers(
                     ClientUploadFileModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -2171,7 +2440,8 @@ class ClientUploadFileViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientUploadFileModelSerializers(data=request.data)
             else:
@@ -2188,18 +2458,24 @@ class ClientUploadFileViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientUploadFileModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientUploadFileModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientBankViewSet(viewsets.ModelViewSet):
     queryset = ClientBankModel.objects.filter(hideStatus=0)
     serializer_class = ClientBankModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientBankModelSerializers(ClientBankModel.objects.filter(hideStatus=0).order_by('-id'),
                                                         many=True)
@@ -2214,7 +2490,8 @@ class ClientBankViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientBankModelSerializers(data=request.data)
             else:
@@ -2230,18 +2507,24 @@ class ClientBankViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientBankModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientBankModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientTaxViewSet(viewsets.ModelViewSet):
     queryset = ClientTaxModel.objects.filter(hideStatus=0)
     serializer_class = ClientTaxModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientTaxModelSerializers(ClientTaxModel.objects.filter(hideStatus=0).order_by('-id'),
                                                        many=True)
@@ -2256,7 +2539,8 @@ class ClientTaxViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientTaxModelSerializers(data=request.data)
             else:
@@ -2272,18 +2556,24 @@ class ClientTaxViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientTaxModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientTaxModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
 class ClientPowerOfAttorneyViewSet(viewsets.ModelViewSet):
     queryset = ClientPowerOfAttorneyModel.objects.filter(hideStatus=0)
     serializer_class = ClientPowerOfAttorneyModelSerializers
+    permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientPowerOfAttorneyModelSerializers(
                     ClientPowerOfAttorneyModel.objects.filter(hideStatus=0).order_by('-id'),
@@ -2299,7 +2589,8 @@ class ClientPowerOfAttorneyViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
-        if request.headers['token'] != "":
+        user = request.user
+        if user.is_authenticated:
             if pk == "0":
                 serializer = ClientPowerOfAttorneyModelSerializers(data=request.data)
             else:
@@ -2321,6 +2612,10 @@ class ClientPowerOfAttorneyViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        ClientPowerOfAttorneyModel.objects.filter(id=pk).update(hideStatus='1')
-        response = {'code': 1, 'message': "Done Successfully"}
+        user = request.user
+        if user.is_authenticated:
+            ClientPowerOfAttorneyModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
