@@ -170,7 +170,7 @@ class AumEntryModel(models.Model):
     aumArnNumber = models.ForeignKey(ArnEntryModel, on_delete=models.CASCADE, related_name="aumArnNumber", null=True,
                                      blank=True)
     aumAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="aumAmcName",
-                                           null=True, blank=True)
+                                   null=True, blank=True)
     aumInvoiceNumber = models.CharField(max_length=200, null=True, blank=True)
     aumAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     aumMonth = models.CharField(max_length=7, help_text="Format: YYYY-MM")
@@ -184,7 +184,7 @@ class CommissionEntryModel(models.Model):
     commissionArnNumber = models.ForeignKey(ArnEntryModel, on_delete=models.CASCADE, related_name="commissionArnNumber",
                                             null=True, blank=True)
     commissionAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE,
-                                                  related_name="commissionAmcName", null=True, blank=True)
+                                          related_name="commissionAmcName", null=True, blank=True)
     commissionAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     commissionMonth = models.CharField(max_length=7, help_text="Format: YYYY-MM")
     hideStatus = models.IntegerField(default=0)
@@ -195,7 +195,7 @@ class CommissionEntryModel(models.Model):
 class AumYoyGrowthEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
     aumYoyGrowthAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE,
-                                                    related_name="aumYoyGrowthAmcName", null=True, blank=True)
+                                            related_name="aumYoyGrowthAmcName", null=True, blank=True)
     aumYoyGrowthAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     aumYoyGrowthDate = models.DateField(null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
@@ -220,7 +220,7 @@ class GstEntryModel(models.Model):
     gstInvoiceDate = models.DateField(null=True, blank=True)
     gstInvoiceNumber = models.CharField(max_length=200, null=True, blank=True)
     gstAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="gstAmcName",
-                                           null=True, blank=True)
+                                   null=True, blank=True)
     gstTotalValue = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     gstTaxableValue = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     gstIGst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
@@ -296,7 +296,7 @@ class CourierFileModel(models.Model):
     id = models.AutoField(primary_key=True)
     courier = models.ForeignKey(CourierModel, related_name='courier', on_delete=models.CASCADE)
     courierFile = models.FileField(upload_to="courierFile/",
-                                   storage=UniqueFileStorage(),null=True, blank=True,
+                                   storage=UniqueFileStorage(), null=True, blank=True,
                                    validators=[FileExtensionValidator(allowed_extensions=["pdf", "doc", "docx"])])
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
