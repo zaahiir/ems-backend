@@ -11,11 +11,12 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.contrib.auth import authenticate
 from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 import urllib.parse
 from .serializers import *
 from django.http import JsonResponse
 from datetime import datetime
+from .utils import get_tokens_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -35,18 +36,19 @@ class UserViewSet(viewsets.ViewSet):
         password = request.data.get('password')
         dob = request.data.get('dob')
 
-        logger.debug(f"Login attempt for username: {username}")
-
         if not username:
             return Response({"detail": "Username is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Authenticate superuser
         user = authenticate(username=username, password=password)
         if user and user.is_superuser:
-            refresh = RefreshToken.for_user(user)
+            tokens = get_tokens_for_user({
+                'username': user.username,
+                'id': user.id,
+                'user_type': 'superuser'
+            })
             return Response({
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
+                **tokens,
                 'user_type': 'superuser',
                 'user_id': user.id,
                 'username': user.username,
@@ -56,17 +58,18 @@ class UserViewSet(viewsets.ViewSet):
         # Check Employee credentials
         employee = EmployeeModel.objects.filter(employeeEmail=username).first()
         if employee:
-            logger.debug(f"Employee found: {employee.employeeEmail}")
             if not password:
                 return Response({"detail": "Password is required for employee login"},
                                 status=status.HTTP_400_BAD_REQUEST)
 
             if employee.check_password(password):
-                logger.debug("Password check successful")
-                refresh = RefreshToken.for_user(employee)
+                tokens = get_tokens_for_user({
+                    'username': employee.employeeEmail,
+                    'id': employee.id,
+                    'user_type': 'employee'
+                })
                 return Response({
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token),
+                    **tokens,
                     'user_type': 'employee',
                     'user_id': employee.id,
                     'name': employee.employeeName,
@@ -75,7 +78,6 @@ class UserViewSet(viewsets.ViewSet):
                     'user_type_name': employee.employeeUserType.userTypeName if employee.employeeUserType else None,
                 }, status=status.HTTP_200_OK)
             else:
-                logger.debug("Password check failed")
                 return Response({"detail": "Invalid password for employee"}, status=status.HTTP_401_UNAUTHORIZED)
 
         # Check Client credentials
@@ -90,10 +92,13 @@ class UserViewSet(viewsets.ViewSet):
 
         client = ClientModel.objects.filter(clientPanNo=username, clientDateOfBirth=dob_date).first()
         if client:
-            refresh = RefreshToken.for_user(client)
+            tokens = get_tokens_for_user({
+                'username': client.clientPanNo,
+                'id': client.id,
+                'user_type': 'client'
+            })
             return Response({
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
+                **tokens,
                 'user_type': 'client',
                 'user_id': client.id,
                 'name': client.clientName,
@@ -101,6 +106,23 @@ class UserViewSet(viewsets.ViewSet):
             }, status=status.HTTP_200_OK)
 
         return Response({"detail": "No user found with provided credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+
+    @action(detail=False, methods=['post'])
+    def logout(self, request):
+        try:
+            refresh_token = request.data.get("refresh_token")
+            if not refresh_token:
+                raise ValidationError("Refresh token is required")
+
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+            return Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
+        except TokenError:
+            return Response({"detail": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
+        except ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"detail": "An error occurred during logout"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class UserTypeViewSet(viewsets.ModelViewSet):

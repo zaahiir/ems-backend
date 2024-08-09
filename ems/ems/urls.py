@@ -9,7 +9,8 @@ from django.conf.urls.static import static
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('apis/', include('apis.urls')),
-    path('login/', UserViewSet.as_view({'post': 'login'}), name='login'),
+    path('api/login/', UserViewSet.as_view({'post': 'login'}), name='login'),
+    path('api/logout/', UserViewSet.as_view({'post': 'logout'}), name='logout'),
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]
