@@ -114,8 +114,7 @@ class AumEntryModelSerializers(serializers.ModelSerializer):
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation['aumArnNumber'] = instance.aumArnNumber.arnNumber if instance.aumArnNumber else None
-        representation[
-            'aumAmcName'] = instance.aumAmcName.amcName if instance.aumAmcName else None
+        representation['aumAmcName'] = instance.aumAmcName.amcName if instance.aumAmcName else None
         return representation
 
 
@@ -308,13 +307,19 @@ class TaskModelSerializers(serializers.ModelSerializer):
 
 
 class EmployeeModelSerializers(serializers.ModelSerializer):
+    employeeUserType = serializers.PrimaryKeyRelatedField(queryset=UserTypeModel.objects.all())
+
     class Meta:
         model = EmployeeModel
         fields = '__all__'
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['employeeUserType'] = instance.employeeUserType.userTypeName if instance.employeeUserType else None
+        return representation
+
 
 class ClientModelSerializers(serializers.ModelSerializer):
-
     class Meta:
         model = ClientModel
         fields = '__all__'
@@ -333,35 +338,30 @@ class ClientChildrenDetailModelSerializers(serializers.ModelSerializer):
 
 
 class ClientPresentAddressModelSerializers(serializers.ModelSerializer):
-
     class Meta:
         model = ClientPresentAddressModel
         fields = '__all__'
 
 
 class ClientPermanentAddressModelSerializers(serializers.ModelSerializer):
-
     class Meta:
         model = ClientPermanentAddressModel
         fields = '__all__'
 
 
 class ClientOfficeAddressModelSerializers(serializers.ModelSerializer):
-
     class Meta:
         model = ClientOfficeAddressModel
         fields = '__all__'
 
 
 class ClientOverseasAddressModelSerializers(serializers.ModelSerializer):
-
     class Meta:
         model = ClientOverseasAddressModel
         fields = '__all__'
 
 
 class ClientNomineeModelSerializers(serializers.ModelSerializer):
-
     class Meta:
         model = ClientNomineeModel
         fields = '__all__'
@@ -442,7 +442,6 @@ class ClientUploadFileModelSerializers(serializers.ModelSerializer):
 
 
 class ClientBankModelSerializers(serializers.ModelSerializer):
-
     class Meta:
         model = ClientBankModel
         fields = '__all__'
