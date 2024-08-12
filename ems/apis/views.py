@@ -17,6 +17,7 @@ from .serializers import *
 from django.http import JsonResponse
 from datetime import datetime
 from .utils import get_tokens_for_user
+from django.shortcuts import get_object_or_404
 
 logger = logging.getLogger(__name__)
 
@@ -1580,6 +1581,46 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     serializer_class = EmployeeModelSerializers
     permission_classes = [IsAuthenticated]  # Ensure only authenticated users can access these views
 
+    @action(detail=False, methods=['get'])
+    def profile(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'detail': 'Authentication credentials were not provided.'},
+                            status=status.HTTP_401_UNAUTHORIZED)
+
+        if user.is_superuser:
+            return Response({
+                'user_type': 'superuser',
+                'user_id': user.id,
+                'username': user.username,
+                'email': user.email,
+            }, status=status.HTTP_200_OK)
+
+        try:
+            employee = EmployeeModel.objects.get(employeeEmail=user.email)
+            serializer = EmployeeModelSerializers(employee)
+            return Response({
+                'user_type': 'employee',
+                **serializer.data
+            }, status=status.HTTP_200_OK)
+        except EmployeeModel.DoesNotExist:
+            pass
+
+        try:
+            client = ClientModel.objects.get(clientEmail=user.email)
+            return Response({
+                'user_type': 'client',
+                'user_id': client.id,
+                'name': client.clientName,
+                'email': client.clientEmail,
+                'pan_no': client.clientPanNo,
+                'date_of_birth': client.clientDateOfBirth,
+            }, status=status.HTTP_200_OK)
+        except ClientModel.DoesNotExist:
+            pass
+
+        return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
         user = request.user
@@ -1590,7 +1631,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
             else:
                 serializer = EmployeeModelSerializers(EmployeeModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
                                                       many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+            response = {'code': 1, 'data': serializer.data, 'message': "All Retrieved"}
         else:
             response = {'code': 0, 'data': [], 'message': "Token is invalid"}
         return Response(response)
@@ -1604,6 +1645,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 if serializer.is_valid():
                     # Save new instance first
                     employee_instance = serializer.save()
+
                     # Hash the password if provided
                     raw_password = request.data.get('employeePassword', None)
                     if raw_password:
@@ -1621,6 +1663,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 serializer = EmployeeModelSerializers(instance=employee_instance, data=request.data, partial=True)
                 if serializer.is_valid():
                     serializer.save()  # Save instance first
+
                     # Hash the password if provided
                     raw_password = request.data.get('employeePassword', None)
                     if raw_password:
