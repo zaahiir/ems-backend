@@ -11,7 +11,7 @@ urlpatterns = [
     path('apis/', include('apis.urls')),
     path('apis/login/', UserViewSet.as_view({'post': 'login'}), name='login'),
     path('apis/logout/', UserViewSet.as_view({'post': 'logout'}), name='logout'),
-    path('apis/employee/profile/', EmployeeViewSet.as_view({'get': 'profile'}), name='profile'),
+    path('apis/profile/', UserViewSet.as_view({'get': 'profile'}), name='profile'),
     path('apis/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('apis/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 ]

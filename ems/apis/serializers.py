@@ -308,14 +308,22 @@ class TaskModelSerializers(serializers.ModelSerializer):
 
 class EmployeeModelSerializers(serializers.ModelSerializer):
     employeeUserType = serializers.PrimaryKeyRelatedField(queryset=UserTypeModel.objects.all())
+    employeePhotoUrl = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeModel
         fields = '__all__'
 
+    def get_employeePhotoUrl(self, obj):
+        request = self.context.get('request')
+        if obj.employeeFile:
+            return request.build_absolute_uri(obj.employeeFile.url)
+        return None
+
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['employeeUserType'] = instance.employeeUserType.userTypeName if instance.employeeUserType else None
+        representation[
+            'employeeUserType'] = instance.employeeUserType.userTypeName if instance.employeeUserType else None
         return representation
 
 

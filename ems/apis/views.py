@@ -108,6 +108,46 @@ class UserViewSet(viewsets.ViewSet):
 
         return Response({"detail": "No user found with provided credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
+    @action(detail=False, methods=['get'])
+    def profile(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'detail': 'Authentication credentials were not provided.'},
+                            status=status.HTTP_401_UNAUTHORIZED)
+
+        if user.is_superuser:
+            return Response({
+                'user_type': 'superuser',
+                'user_id': user.id,
+                'username': user.username,
+                'email': user.email,
+            }, status=status.HTTP_200_OK)
+
+        try:
+            employee = EmployeeModel.objects.get(employeeEmail=user.email)
+            serializer = EmployeeModelSerializers(employee, context={'request': request})
+            return Response({
+                'user_type': 'employee',
+                **serializer.data
+            }, status=status.HTTP_200_OK)
+        except EmployeeModel.DoesNotExist:
+            pass
+
+        try:
+            client = ClientModel.objects.get(clientEmail=user.email)
+            return Response({
+                'user_type': 'client',
+                'user_id': client.id,
+                'name': client.clientName,
+                'email': client.clientEmail,
+                'pan_no': client.clientPanNo,
+                'date_of_birth': client.clientDateOfBirth,
+            }, status=status.HTTP_200_OK)
+        except ClientModel.DoesNotExist:
+            pass
+
+        return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+
     @action(detail=False, methods=['post'])
     def logout(self, request):
         try:
@@ -1581,56 +1621,17 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     serializer_class = EmployeeModelSerializers
     permission_classes = [IsAuthenticated]  # Ensure only authenticated users can access these views
 
-    @action(detail=False, methods=['get'])
-    def profile(self, request):
-        user = request.user
-        if not user.is_authenticated:
-            return Response({'detail': 'Authentication credentials were not provided.'},
-                            status=status.HTTP_401_UNAUTHORIZED)
-
-        if user.is_superuser:
-            return Response({
-                'user_type': 'superuser',
-                'user_id': user.id,
-                'username': user.username,
-                'email': user.email,
-            }, status=status.HTTP_200_OK)
-
-        try:
-            employee = EmployeeModel.objects.get(employeeEmail=user.email)
-            serializer = EmployeeModelSerializers(employee)
-            return Response({
-                'user_type': 'employee',
-                **serializer.data
-            }, status=status.HTTP_200_OK)
-        except EmployeeModel.DoesNotExist:
-            pass
-
-        try:
-            client = ClientModel.objects.get(clientEmail=user.email)
-            return Response({
-                'user_type': 'client',
-                'user_id': client.id,
-                'name': client.clientName,
-                'email': client.clientEmail,
-                'pan_no': client.clientPanNo,
-                'date_of_birth': client.clientDateOfBirth,
-            }, status=status.HTTP_200_OK)
-        except ClientModel.DoesNotExist:
-            pass
-
-        return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
-
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
             if pk == "0":
-                serializer = EmployeeModelSerializers(EmployeeModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                      many=True)
+                queryset = EmployeeModel.objects.filter(hideStatus=0).order_by('-id')
             else:
-                serializer = EmployeeModelSerializers(EmployeeModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                                                      many=True)
+                queryset = EmployeeModel.objects.filter(hideStatus=0, id=pk).order_by('-id')
+
+            # Pass the request context to the serializer
+            serializer = EmployeeModelSerializers(queryset, many=True, context={'request': request})
             response = {'code': 1, 'data': serializer.data, 'message': "All Retrieved"}
         else:
             response = {'code': 0, 'data': [], 'message': "Token is invalid"}
@@ -1675,6 +1676,25 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
+
+    @action(detail=True, methods=['POST'])
+    def update_password(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            try:
+                employee = EmployeeModel.objects.get(id=pk)
+                new_password = request.data.get('newPassword')
+                if new_password:
+                    employee.set_password(new_password)
+                    employee.save()
+                    return Response({'code': 1, 'message': "Password updated successfully"})
+                else:
+                    return Response({'code': 0, 'message': "New password is required"},
+                                    status=status.HTTP_400_BAD_REQUEST)
+            except EmployeeModel.DoesNotExist:
+                return Response({'code': 0, 'message': "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
