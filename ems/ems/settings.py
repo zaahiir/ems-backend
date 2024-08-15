@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_countries',
     'apis',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -131,9 +132,10 @@ SIMPLE_JWT = {
 }
 
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 USE_I18N = True
 USE_TZ = True
+USE_L10N = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
@@ -149,3 +151,11 @@ MIME_TYPES = {
     'pdf': 'application/pdf',
     # Add other MIME types as needed
 }
+
+# Celery settings
+CELERY_BROKER_URL = 'redis://localhost:6379'  # Adjust as per your setup
+CELERY_RESULT_BACKEND = 'redis://localhost:6379'
+CELERY_ACCEPT_CONTENT = ['application/json']
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'  # Set to your timezone
