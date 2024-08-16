@@ -5,9 +5,7 @@ import logging
 import logging.config
 
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-05k%mpd+p8b!wb$-w4^hj0qkmm^tn+@*i9$0tl11sdmsq@nn3)')
@@ -17,12 +15,10 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
-CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:4200',  # Replace with your frontend URL
 ]
-# CORS_ALLOW_HEADERS = ['*']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -38,6 +34,7 @@ INSTALLED_APPS = [
     'django_countries',
     'apis',
     'django_celery_beat',
+    'django_celery_results',  # Enable Celery result backend
 ]
 
 MIDDLEWARE = [
@@ -111,21 +108,13 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': False,
     'UPDATE_LAST_LOGIN': False,
     'ALGORITHM': 'HS256',
-    'SIGNING_KEY': SECRET_KEY,  # Use the SECRET_KEY as the SIGNING_KEY
-    'VERIFYING_KEY': None,
-    'AUDIENCE': None,
-    'ISSUER': None,
+    'SIGNING_KEY': SECRET_KEY,
     'AUTH_HEADER_TYPES': ('Bearer',),
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
-    'USER_AUTHENTICATION_RULE': 'rest_framework_simplejwt.authentication.default_user_authentication_rule',
-
-    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'TOKEN_TYPE_CLAIM': 'token_type',
     'TOKEN_USER_CLASS': 'rest_framework_simplejwt.models.TokenUser',
-
     'JTI_CLAIM': 'jti',
-
     'SLIDING_TOKEN_REFRESH_EXP_CLAIM': 'refresh_exp',
     'SLIDING_TOKEN_LIFETIME': timedelta(minutes=5),
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
@@ -145,17 +134,36 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
 MIME_TYPES = {
     'mp4': 'video/mp4',
     'pdf': 'application/pdf',
-    # Add other MIME types as needed
 }
 
 # Celery settings
-CELERY_BROKER_URL = 'redis://localhost:6379'  # Adjust as per your setup
-CELERY_RESULT_BACKEND = 'redis://localhost:6379'
-CELERY_ACCEPT_CONTENT = ['application/json']
-CELERY_RESULT_SERIALIZER = 'json'
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
+CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'UTC'  # Set to your timezone
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'Asia/Kolkata'
+CELERY_ENABLE_UTC = True
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# Optional: Routing tasks to different queues
+CELERY_TASK_ROUTES = {
+    'apis.tasks.fetch_daily_nav': {'queue': 'nav_tasks'},
+    # Add more tasks and queues as needed
+}
+
+CELERY_QUEUES = {
+    'default': {
+        'exchange': 'default',
+        'binding_key': 'default',
+    },
+}
+
+
+# For Celery result backend (optional)
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
+CELERY_CACHE_BACKEND = 'django-cache'
+
