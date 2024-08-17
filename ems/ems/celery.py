@@ -17,7 +17,7 @@ app.conf.timezone = 'Asia/Kolkata'
 app.conf.beat_schedule = {
     'fetch-daily-nav': {
         'task': 'apis.tasks.fetch_daily_nav',
-        'schedule': crontab(hour=10, minute=00),  # This will use Asia/Kolkata timezone
+        'schedule': crontab(hour=10, minute=30),  # This will use Asia/Kolkata timezone
     },
 }
 
