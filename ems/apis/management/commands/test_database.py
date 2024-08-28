@@ -1,15 +1,12 @@
 from django.core.management.base import BaseCommand
-from django.db import transaction, connection
-from django.db.utils import IntegrityError
+from django.db import transaction
 from apis.models import NavModel, AmcEntryModel
 import requests
 from datetime import datetime, timedelta
 import pytz
 import logging
+from django.db.models import Count
 from collections import defaultdict
-import time
-from django.conf import settings
-from psycopg2 import OperationalError
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +33,6 @@ class Command(BaseCommand):
             help='End date for fetching NAV data in dd-MMM-yyyy format (e.g., 20-Aug-2024)',
             required=False,
         )
-        parser.add_argument(
-            '--batch_size',
-            type=int,
-            default=50000,
-            help='Batch size for database operations',
-        )
 
     def handle(self, *args, **options):
         logger.info(f"Starting fetch_nav_data command at {datetime.now()}")
@@ -49,12 +40,10 @@ class Command(BaseCommand):
             date = options.get('date')
             start_date = options.get('start_date')
             end_date = options.get('end_date')
-            self.batch_size = options.get('batch_size')
 
             self.records_per_day = defaultdict(int)
             self.records_per_month = defaultdict(int)
             self.total_records_fetched = 0
-            self.total_records_processed = 0
 
             if start_date and end_date:
                 self.fetch_date_range(start_date, end_date)
@@ -79,7 +68,8 @@ class Command(BaseCommand):
             records = self.fetch_data_for_date(current_date)
             if records is None:
                 self.stdout.write(
-                    self.style.WARNING(f"Failed to fetch data for {current_date.date()}. Continuing to next date."))
+                    self.style.WARNING(f"Failed to fetch data for {current_date.date()}. Stopping execution."))
+                break
             current_date += timedelta(days=1)
 
     def fetch_single_date(self, date_str):
@@ -96,37 +86,22 @@ class Command(BaseCommand):
         url = f"https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx?frmdt={date_str}"
         logger.info(f"Fetching data for date: {date_str}")
 
-        max_retries = 3
-        retry_delay = 5
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
 
-        for attempt in range(max_retries):
-            try:
-                response = requests.get(url, timeout=30)
-                response.raise_for_status()
+            data_lines = response.text.splitlines()
+            nav_count = self.process_nav_data(data_lines, date)
 
-                data_lines = response.text.splitlines()
-                nav_count = self.process_nav_data(data_lines, date)
+            self.update_statistics(date, nav_count)
+            self.stdout.write(self.style.SUCCESS(f"\nRecords fetched for {date_str}: {nav_count}"))
+            return nav_count
 
-                self.update_statistics(date, nav_count)
-                self.stdout.write(self.style.SUCCESS(f"\nRecords fetched for {date_str}: {nav_count}"))
-                return nav_count
-
-            except requests.exceptions.RequestException as e:
-                if attempt < max_retries - 1:
-                    self.stdout.write(
-                        self.style.WARNING(f"Error fetching data for {date_str}. Retrying in {retry_delay} seconds..."))
-                    time.sleep(retry_delay)
-                else:
-                    error_msg = f'Error fetching data for {date_str} after {max_retries} attempts: {str(e)}'
-                    self.stdout.write(self.style.ERROR(error_msg))
-                    logger.error(error_msg)
-                    return None
-
-            except Exception as e:
-                error_msg = f'Error processing data for {date_str}: {str(e)}'
-                self.stdout.write(self.style.ERROR(error_msg))
-                logger.error(error_msg, exc_info=True)
-                return None
+        except Exception as e:
+            error_msg = f'Error fetching/processing data for {date_str}: {str(e)}'
+            self.stdout.write(self.style.ERROR(error_msg))
+            logger.error(error_msg, exc_info=True)
+            return None
 
     def process_nav_data(self, data_lines, date):
         nav_count = 0
@@ -166,7 +141,7 @@ class Command(BaseCommand):
 
                 nav_count += 1
 
-                if len(nav_data) >= self.batch_size:
+                if len(nav_data) >= 10000:
                     self.bulk_update_or_create(nav_data)
                     nav_data = []
 
@@ -177,30 +152,6 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def bulk_update_or_create(self, nav_data):
-        max_retries = 3
-        retry_delay = 5
-
-        for attempt in range(max_retries):
-            try:
-                with transaction.atomic():
-                    self.perform_bulk_operation(nav_data)
-                break
-            except OperationalError as e:
-                if attempt < max_retries - 1:
-                    self.stdout.write(
-                        self.style.WARNING(f"Database error occurred. Retrying in {retry_delay} seconds..."))
-                    time.sleep(retry_delay)
-                else:
-                    error_msg = f'Database error after {max_retries} attempts: {str(e)}'
-                    self.stdout.write(self.style.ERROR(error_msg))
-                    logger.error(error_msg)
-            except IntegrityError as e:
-                error_msg = f'Integrity error during bulk operation: {str(e)}'
-                self.stdout.write(self.style.ERROR(error_msg))
-                logger.error(error_msg)
-                self.handle_integrity_error(nav_data)
-
-    def perform_bulk_operation(self, nav_data):
         existing_navs = NavModel.objects.filter(
             navAmcName__in=[data['navAmcName'] for data in nav_data],
             navFundName__in=[data['navFundName'] for data in nav_data],
@@ -223,33 +174,8 @@ class Command(BaseCommand):
             else:
                 navs_to_create.append(NavModel(**nav))
 
-        try:
-            NavModel.objects.bulk_create(navs_to_create, ignore_conflicts=True)
-            NavModel.objects.bulk_update(navs_to_update, ['nav'])
-        except OperationalError as e:
-            logger.error(f"Operational error during bulk operation: {str(e)}")
-            raise
-        except IntegrityError as e:
-            logger.error(f"Integrity error during bulk operation: {str(e)}")
-            self.handle_integrity_error(nav_data)
-
-        self.total_records_processed += len(nav_data)
-
-    def handle_integrity_error(self, nav_data):
-        for nav in nav_data:
-            try:
-                NavModel.objects.update_or_create(
-                    navAmcName=nav['navAmcName'],
-                    navFundName=nav['navFundName'],
-                    navDate=nav['navDate'],
-                    defaults={'nav': nav['nav']}
-                )
-            except IntegrityError as e:
-                error_msg = f'Integrity error for record: {nav}. Error: {str(e)}'
-                logger.error(error_msg)
-            except OperationalError as e:
-                error_msg = f'Operational error for record: {nav}. Error: {str(e)}'
-                logger.error(error_msg)
+        NavModel.objects.bulk_create(navs_to_create)
+        NavModel.objects.bulk_update(navs_to_update, ['nav'])
 
     def get_or_create_amc(self, amc_name):
         amc, _ = AmcEntryModel.objects.get_or_create(amcName=amc_name)
@@ -271,16 +197,6 @@ class Command(BaseCommand):
             self.stdout.write(f"  {year}-{month:02d}: {count}")
 
         self.stdout.write(f"\nTotal records fetched: {self.total_records_fetched}")
-        self.stdout.write(f"Total records processed: {self.total_records_processed}")
 
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT COUNT(*) FROM apis_navmodel")
-                total_records_in_db = cursor.fetchone()[0]
-            self.stdout.write(f"\nTotal records in the database: {total_records_in_db}")
-        except OperationalError as e:
-            self.stdout.write(self.style.ERROR(f"Error counting records in database: {str(e)}"))
-
-        if settings.DEBUG:
-            self.stdout.write(self.style.WARNING(
-                "\nWarning: DEBUG mode is enabled. Consider disabling it for better performance in production."))
+        total_records_in_db = NavModel.objects.count()
+        self.stdout.write(f"\nTotal records in the database: {total_records_in_db}")

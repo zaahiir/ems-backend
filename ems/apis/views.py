@@ -18,6 +18,9 @@ from django.http import JsonResponse
 from datetime import datetime
 from .utils import get_tokens_for_user
 from django.shortcuts import get_object_or_404
+from rest_framework.pagination import PageNumberPagination
+from django.core.management import call_command
+from django.db.models import Q
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,12 @@ class CustomJSONEncoder(DjangoJSONEncoder):
         if isinstance(obj, Country):
             return str(obj)
         return super().default(obj)
+
+
+class CustomPageNumberPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 
 # Create your views here.
@@ -1189,24 +1198,45 @@ class GstEntryViewSet(viewsets.ModelViewSet):
 
 
 class NavViewSet(viewsets.ModelViewSet):
-    queryset = NavModel.objects.filter(hideStatus=0)
+    queryset = NavModel.objects.filter(hideStatus=0).order_by('-createdAt')
     serializer_class = NavModelSerializers
     permission_classes = [IsAuthenticated]
+    pagination_class = CustomPageNumberPagination
 
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
         user = request.user
         if user.is_authenticated:
-            if pk == "0":
-                serializer = NavModelSerializers(NavModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                 many=True)
-            else:
-                serializer = NavModelSerializers(NavModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                                                 many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+            queryset = self.get_queryset()
+            search = request.query_params.get('search', None)
+            if search:
+                queryset = queryset.filter(
+                    Q(navAmcName__amcName__icontains=search) |
+                    Q(navFundName__icontains=search) |
+                    Q(nav__icontains=search)
+                )
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({'code': 1, 'data': serializer.data, 'message': "All Retrieved"})
         else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'data': [], 'message': "Token is invalid"})
+
+    @action(detail=True, methods=['GET'])
+    def list_for_update(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            try:
+                instance = NavModel.objects.get(id=pk)
+                serializer = NavModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except NavModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
+        else:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
@@ -1215,16 +1245,53 @@ class NavViewSet(viewsets.ModelViewSet):
             if pk == "0":
                 serializer = NavModelSerializers(data=request.data)
             else:
-                serializer = NavModelSerializers(instance=NavModel.objects.get(id=pk), data=request.data)
+                instance = NavModel.objects.get(id=pk)
+                serializer = NavModelSerializers(instance=instance, data=request.data)
+
             if serializer.is_valid():
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
         else:
-            print("Serializer errors:", serializers.errors)
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
+
+    @action(detail=False, methods=['POST'])
+    def fetch(self, request):
+        user = request.user
+        if user.is_authenticated:
+            date = request.data.get('date')
+            start_date = request.data.get('start_date')
+            end_date = request.data.get('end_date')
+
+            try:
+                if date:
+                    call_command('fetch_nav_data', date=date)
+                    message = f"NAV data fetched successfully for {date}"
+                elif start_date and end_date:
+                    call_command('fetch_nav_data', start_date=start_date, end_date=end_date)
+                    message = f"Historic NAV data fetched successfully from {start_date} to {end_date}"
+                else:
+                    return Response({
+                        'code': 0,
+                        'message': "Invalid parameters. Provide either 'date' or both 'start_date' and 'end_date'."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+                return Response({
+                    'code': 1,
+                    'message': message
+                }, status=status.HTTP_200_OK)
+            except Exception as e:
+                return Response({
+                    'code': 0,
+                    'message': f"Error fetching NAV data: {str(e)}"
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            return Response({
+                'code': 0,
+                'message': "Token is invalid"
+            }, status=status.HTTP_401_UNAUTHORIZED)
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):

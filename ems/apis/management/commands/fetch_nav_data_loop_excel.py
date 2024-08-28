@@ -4,15 +4,14 @@ from datetime import datetime, timedelta
 import logging
 import io
 import zipfile
-import csv
 import openpyxl
-from openpyxl.utils.dataframe import dataframe_to_rows
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
-MAX_ROWS_PER_SHEET = 1_000_000
+MAX_ROWS_PER_SHEET = 1_000_001
 
 
 class Command(BaseCommand):
@@ -25,8 +24,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         logger.info("Starting fetch_nav_data command")
-        start_date = datetime.strptime(options['start_date'], '%d-%b-%Y')
-        end_date = datetime.strptime(options['end_date'], '%d-%b-%Y')
+        start_date = datetime.strptime(options['start_date'], '%d-%b-%Y').date()
+        end_date = datetime.strptime(options['end_date'], '%d-%b-%Y').date()
         output_file = options['output_file']
 
         try:
@@ -38,14 +37,13 @@ class Command(BaseCommand):
                 total_records = 0
 
                 while current_date <= end_date:
-                    date_str = current_date.strftime('%d-%b-%Y')
-                    records_fetched = self.fetch_and_write_data(date_str, data)
-                    if records_fetched > 0:
+                    records_fetched = self.fetch_data_for_date(current_date, data)
+                    if records_fetched is not None:
                         self.stdout.write(
-                            self.style.SUCCESS(f'Successfully fetched {records_fetched} records for {date_str}'))
+                            self.style.SUCCESS(f'Successfully fetched {records_fetched} records for {current_date}'))
                         total_records += records_fetched
                     else:
-                        self.stdout.write(self.style.ERROR(f'Failed to fetch data for {date_str}'))
+                        self.stdout.write(self.style.ERROR(f'Failed to fetch data for {current_date}'))
 
                     current_date += timedelta(days=1)
 
@@ -63,65 +61,69 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(error_msg))
             logger.error(error_msg, exc_info=True)
 
-    def fetch_and_write_data(self, date_str, data):
+    def fetch_data_for_date(self, date, data):
+        date_str = date.strftime('%d-%b-%Y')
         url = f"https://portal.amfiindia.com/DownloadNAVHistoryReport_Po.aspx?frmdt={date_str}"
-        logger.info(f"Fetching data from URL: {url}")
+        logger.info(f"Fetching data for date: {date_str}")
 
         session = requests.Session()
         retries = Retry(total=5, backoff_factor=0.1, status_forcelist=[500, 502, 503, 504])
         session.mount('https://', HTTPAdapter(max_retries=retries))
 
         try:
-            response = session.get(url, timeout=30, stream=True)
+            response = session.get(url, timeout=30)
             response.raise_for_status()
 
-            logger.info(f"Data fetched successfully for {date_str}. Status code: {response.status_code}")
+            data_lines = response.text.splitlines()
 
             current_amc_name = None
-            records_fetched = 0
-            for line in response.iter_lines(decode_unicode=True):
-                line = line.strip()
-                if not line:
-                    continue
+            nav_count = 0
 
-                if line.startswith("Open Ended Schemes") or line.startswith("Close Ended Schemes"):
-                    continue
-
-                if not line[0].isdigit() and ';' not in line:
-                    current_amc_name = line
-                    continue
-
-                if current_amc_name and ';' in line:
-                    fields = line.split(';')
-                    if len(fields) < 8:
-                        logger.warning(f"Skipping line due to insufficient fields: {line}")
+            for line in data_lines:
+                try:
+                    line = line.strip()
+                    if not line or line.startswith("Open Ended Schemes") or line.startswith("Close Ended Schemes"):
                         continue
 
-                    scheme_name = fields[1]
-                    net_asset_value = fields[4]
-                    date = fields[7]
+                    if ';' not in line:
+                        current_amc_name = line.strip()
+                        continue
 
-                    try:
-                        parsed_date = datetime.strptime(date, '%d-%b-%Y').strftime('%d-%b-%Y')
-                    except ValueError:
-                        logger.warning(f"Invalid date format: {date}")
-                        parsed_date = date
+                    if current_amc_name and ';' in line:
+                        fields = line.split(';')
+                        if len(fields) < 8:
+                            continue
 
-                    data.append([parsed_date, current_amc_name, scheme_name, net_asset_value])
-                    records_fetched += 1
+                        scheme_name = fields[1]
+                        net_asset_value = fields[4]
+                        nav_date = fields[7]
 
-            return records_fetched
+                        try:
+                            parsed_date = datetime.strptime(nav_date, '%d-%b-%Y').date() if nav_date else None
+                        except ValueError:
+                            parsed_date = None
+
+                        data.append(
+                            [parsed_date.strftime('%d-%b-%Y') if parsed_date else '', current_amc_name, scheme_name,
+                             net_asset_value])
+                        nav_count += 1
+
+                except Exception as e:
+                    logger.error(f"Error processing line: {line}. Error: {str(e)}")
+
+            self.stdout.write(self.style.SUCCESS(f"\nRecords fetched for {date_str}: {nav_count}"))
+            return nav_count
 
         except requests.exceptions.RequestException as e:
             error_msg = f'Error fetching data for {date_str}: {str(e)}'
             self.stdout.write(self.style.ERROR(error_msg))
             logger.error(error_msg, exc_info=True)
-            return 0
         except Exception as e:
-            error_msg = f'Unexpected error for {date_str}: {str(e)}'
+            error_msg = f'Unexpected error processing data for {date_str}: {str(e)}'
             self.stdout.write(self.style.ERROR(error_msg))
             logger.error(error_msg, exc_info=True)
-            return 0
+
+        return None
 
     def export_to_excel(self, data, zip_file):
         workbook = openpyxl.Workbook()
