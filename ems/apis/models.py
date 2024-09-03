@@ -5,6 +5,7 @@ import os
 import uuid
 from django.core.files.storage import FileSystemStorage
 from django.contrib.auth.hashers import make_password, check_password
+from django.db.models import Index
 
 
 class UniqueFileStorage(FileSystemStorage):
@@ -233,14 +234,20 @@ class GstEntryModel(models.Model):
 
 class NavModel(models.Model):
     id = models.AutoField(primary_key=True)
-    navAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="navAmcName", null=True,
-                                   blank=True)
+    navAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="navAmcName", null=True, blank=True)
     navFundName = models.CharField(max_length=200, null=True, blank=True)
     nav = models.CharField(max_length=200, null=True, blank=True)
     navDate = models.DateField(null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            Index(fields=['hideStatus', '-createdAt']),
+            Index(fields=['navFundName']),
+            Index(fields=['nav']),
+        ]
 
 
 class IssueModel(models.Model):

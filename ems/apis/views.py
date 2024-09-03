@@ -17,10 +17,13 @@ from .serializers import *
 from django.http import JsonResponse
 from datetime import datetime
 from .utils import get_tokens_for_user
-from django.shortcuts import get_object_or_404
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.pagination import CursorPagination
 from django.core.management import call_command
 from django.db.models import Q
+from django.core.cache import cache
+from django.core.paginator import Paginator
+from django.db.models import Max
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +41,18 @@ class CustomPageNumberPagination(PageNumberPagination):
     max_page_size = 100
 
 
-# Create your views here.
+class LargeResultsSetPagination(PageNumberPagination):
+    page_size = 100
+    page_size_query_param = 'page_size'
+    max_page_size = 1000
+
+
+class NavCursorPagination(CursorPagination):
+    page_size = 10
+    ordering = '-navDate'
+    cursor_query_param = 'cursor'
+
+
 class UserViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'])
     def login(self, request):
@@ -1201,29 +1215,60 @@ class NavViewSet(viewsets.ModelViewSet):
     queryset = NavModel.objects.filter(hideStatus=0).order_by('-createdAt')
     serializer_class = NavModelSerializers
     permission_classes = [IsAuthenticated]
-    pagination_class = CustomPageNumberPagination
 
     @action(detail=False, methods=['GET'])
     def listing(self, request):
         user = request.user
-        if user.is_authenticated:
-            queryset = self.get_queryset()
-            search = request.query_params.get('search', None)
-            if search:
-                queryset = queryset.filter(
-                    Q(navAmcName__amcName__icontains=search) |
-                    Q(navFundName__icontains=search) |
-                    Q(nav__icontains=search)
-                )
-            page = self.paginate_queryset(queryset)
-            if page is not None:
-                serializer = self.get_serializer(page, many=True)
-                return self.get_paginated_response(serializer.data)
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
 
-            serializer = self.get_serializer(queryset, many=True)
-            return Response({'code': 1, 'data': serializer.data, 'message': "All Retrieved"})
-        else:
-            return Response({'code': 0, 'data': [], 'message': "Token is invalid"})
+        page_size = int(request.query_params.get('page_size', 10))
+        search = request.query_params.get('search', '')
+        cursor = request.query_params.get('cursor')
+
+        cache_key = f'nav_list_{cursor}_{page_size}_{search}'
+        cached_data = cache.get(cache_key)
+
+        if cached_data:
+            return Response(cached_data)
+
+        queryset = self.get_queryset().select_related('navAmcName')
+
+        if search:
+            queryset = queryset.filter(
+                Q(navAmcName__amcName__icontains=search) |
+                Q(navFundName__icontains=search) |
+                Q(nav__icontains=search)
+            )
+
+        if cursor:
+            queryset = queryset.filter(id__lt=cursor)
+
+        queryset = queryset.order_by('-id')[:page_size + 1]
+
+        serializer = self.get_serializer(queryset[:page_size], many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'next_cursor': str(queryset[page_size].id) if len(queryset) > page_size else None
+        }
+
+        cache.set(cache_key, data, 300)  # Cache for 5 minutes
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        cache_key = 'nav_total_count'
+        total_count = cache.get(cache_key)
+
+        if total_count is None:
+            total_count = self.get_queryset().count()
+            cache.set(cache_key, total_count, 3600)  # Cache for 1 hour
+
+        return Response({'total_count': total_count})
 
     @action(detail=True, methods=['GET'])
     def list_for_update(self, request, pk=None):
