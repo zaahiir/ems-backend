@@ -1,7 +1,8 @@
 from django.core.management.base import BaseCommand
 from django.db import transaction, connection
 from django.db.utils import IntegrityError
-from apis.models import NavModel, AmcEntryModel
+from apis.models import NavModel, AmcEntryModel, FundModel
+from django.db.transaction import TransactionManagementError
 import requests
 from datetime import datetime, timedelta
 import pytz
@@ -133,6 +134,7 @@ class Command(BaseCommand):
         nav_data = []
         current_amc_name = None
         amc_cache = {}
+        fund_cache = {}
 
         for line in data_lines:
             if not line.strip() or line.startswith("Open Ended Schemes") or line.startswith("Close Ended Schemes"):
@@ -147,68 +149,75 @@ class Command(BaseCommand):
                 if len(fields) < 8:
                     continue
 
-                scheme_name, net_asset_value, nav_date = fields[1], fields[4], fields[7]
-
-                if current_amc_name not in amc_cache:
-                    amc_cache[current_amc_name] = self.get_or_create_amc(current_amc_name)
+                scheme_code, scheme_name, net_asset_value, nav_date = fields[0], fields[1], fields[4], fields[7]
 
                 try:
-                    parsed_date = datetime.strptime(nav_date, '%d-%b-%Y').date() if nav_date else None
-                except ValueError:
-                    parsed_date = None
+                    amc_entry = self.get_or_create_amc(current_amc_name, amc_cache)
+                    fund_entry = self.get_or_create_fund(amc_entry, scheme_name, scheme_code, fund_cache)
 
-                nav_data.append({
-                    'navAmcName': amc_cache[current_amc_name],
-                    'navFundName': scheme_name,
-                    'navDate': parsed_date,
-                    'nav': net_asset_value
-                })
+                    try:
+                        parsed_date = datetime.strptime(nav_date, '%d-%b-%Y').date() if nav_date else None
+                    except ValueError:
+                        parsed_date = None
 
-                nav_count += 1
+                    nav_data.append({
+                        'navFundName': fund_entry,
+                        'navDate': parsed_date,
+                        'nav': net_asset_value
+                    })
 
-                if len(nav_data) >= self.batch_size:
-                    self.bulk_update_or_create(nav_data)
-                    nav_data = []
+                    nav_count += 1
+
+                    if len(nav_data) >= self.batch_size:
+                        self.bulk_update_or_create_nav(nav_data)
+                        nav_data = []
+
+                except Exception as e:
+                    logger.error(f"Error processing line: {line}. Error: {str(e)}")
+                    continue  # Skip this line and continue with the next one
 
         if nav_data:
-            self.bulk_update_or_create(nav_data)
+            self.bulk_update_or_create_nav(nav_data)
 
         return nav_count
 
     @transaction.atomic
-    def bulk_update_or_create(self, nav_data):
-        max_retries = 3
-        retry_delay = 5
+    def get_or_create_amc(self, amc_name, amc_cache):
+        if amc_name not in amc_cache:
+            amc, created = AmcEntryModel.objects.get_or_create(amcName=amc_name)
+            amc_cache[amc_name] = amc
+        return amc_cache[amc_name]
 
-        for attempt in range(max_retries):
+    @transaction.atomic
+    def get_or_create_fund(self, amc_entry, fund_name, scheme_code, fund_cache):
+        key = (amc_entry.id, fund_name)
+        if key not in fund_cache:
             try:
-                with transaction.atomic():
-                    self.perform_bulk_operation(nav_data)
-                break
-            except OperationalError as e:
-                if attempt < max_retries - 1:
-                    self.stdout.write(
-                        self.style.WARNING(f"Database error occurred. Retrying in {retry_delay} seconds..."))
-                    time.sleep(retry_delay)
-                else:
-                    error_msg = f'Database error after {max_retries} attempts: {str(e)}'
-                    self.stdout.write(self.style.ERROR(error_msg))
-                    logger.error(error_msg)
-            except IntegrityError as e:
-                error_msg = f'Integrity error during bulk operation: {str(e)}'
-                self.stdout.write(self.style.ERROR(error_msg))
-                logger.error(error_msg)
-                self.handle_integrity_error(nav_data)
+                fund = FundModel.objects.get(
+                    fundAmcName=amc_entry,
+                    fundName=fund_name
+                )
+                if fund.schemeCode != scheme_code and scheme_code and scheme_code != '-':
+                    fund.schemeCode = scheme_code
+                    fund.save()
+            except FundModel.DoesNotExist:
+                fund = FundModel.objects.create(
+                    fundAmcName=amc_entry,
+                    fundName=fund_name,
+                    schemeCode=scheme_code if scheme_code and scheme_code != '-' else None
+                )
+            fund_cache[key] = fund
+        return fund_cache[key]
 
-    def perform_bulk_operation(self, nav_data):
+    @transaction.atomic
+    def bulk_update_or_create_nav(self, nav_data):
         existing_navs = NavModel.objects.filter(
-            navAmcName__in=[data['navAmcName'] for data in nav_data],
             navFundName__in=[data['navFundName'] for data in nav_data],
             navDate__in=[data['navDate'] for data in nav_data]
-        ).values('id', 'navAmcName', 'navFundName', 'navDate')
+        ).values('id', 'navFundName', 'navDate')
 
         existing_navs_dict = {
-            (nav['navAmcName'], nav['navFundName'], nav['navDate']): nav['id']
+            (nav['navFundName'], nav['navDate']): nav['id']
             for nav in existing_navs
         }
 
@@ -216,7 +225,7 @@ class Command(BaseCommand):
         navs_to_create = []
 
         for nav in nav_data:
-            key = (nav['navAmcName'].id, nav['navFundName'], nav['navDate'])
+            key = (nav['navFundName'].id, nav['navDate'])
             if key in existing_navs_dict:
                 nav['id'] = existing_navs_dict[key]
                 navs_to_update.append(NavModel(**nav))
@@ -226,11 +235,8 @@ class Command(BaseCommand):
         try:
             NavModel.objects.bulk_create(navs_to_create, ignore_conflicts=True)
             NavModel.objects.bulk_update(navs_to_update, ['nav'])
-        except OperationalError as e:
-            logger.error(f"Operational error during bulk operation: {str(e)}")
-            raise
         except IntegrityError as e:
-            logger.error(f"Integrity error during bulk operation: {str(e)}")
+            logger.error(f"Integrity error during bulk NAV operation: {str(e)}")
             self.handle_integrity_error(nav_data)
 
         self.total_records_processed += len(nav_data)
@@ -239,21 +245,16 @@ class Command(BaseCommand):
         for nav in nav_data:
             try:
                 NavModel.objects.update_or_create(
-                    navAmcName=nav['navAmcName'],
                     navFundName=nav['navFundName'],
                     navDate=nav['navDate'],
                     defaults={'nav': nav['nav']}
                 )
             except IntegrityError as e:
-                error_msg = f'Integrity error for record: {nav}. Error: {str(e)}'
+                error_msg = f'Integrity error for NAV record: {nav}. Error: {str(e)}'
                 logger.error(error_msg)
-            except OperationalError as e:
-                error_msg = f'Operational error for record: {nav}. Error: {str(e)}'
+            except Exception as e:
+                error_msg = f'Error processing NAV record: {nav}. Error: {str(e)}'
                 logger.error(error_msg)
-
-    def get_or_create_amc(self, amc_name):
-        amc, _ = AmcEntryModel.objects.get_or_create(amcName=amc_name)
-        return amc
 
     def update_statistics(self, date, nav_count):
         self.records_per_day[date.date()] += nav_count

@@ -21,6 +21,7 @@ router.register('accountType', AccountTypeViewSet, basename='AccountType'),
 router.register('accountPreference', AccountPreferenceViewSet, basename='AccountPreference'),
 router.register('arnEntry', ArnEntryViewSet, basename='arnEntry'),
 router.register('amcEntry', AmcEntryViewSet, basename='amcEntry'),
+router.register('fund', FundViewSet, basename='fund'),
 router.register('aumEntry', AumEntryViewSet, basename='aumEntry'),
 router.register('commissionEntry', CommissionEntryViewSet, basename='commissionEntry'),
 router.register('aumYoyGrowthEntry', AumYoyGrowthEntryViewSet, basename='aumYoyGrowthEntry'),
@@ -48,6 +49,7 @@ router.register('clientTermInsurance', ClientTermInsuranceViewSet, basename='cli
 router.register('clientUploadFile', ClientUploadFileViewSet, basename='clientUploadFile'),
 router.register('clientBank', ClientBankViewSet, basename='clientBank'),
 router.register('clientTax', ClientTaxViewSet, basename='clientTax'),
+router.register('dailyEntry', DailyEntryViewSet, basename='dailyEntry'),
 
 
 urlpatterns = [

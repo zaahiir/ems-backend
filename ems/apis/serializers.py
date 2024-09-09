@@ -103,6 +103,24 @@ class AmcEntryModelSerializers(CountryFieldMixin, serializers.ModelSerializer):
         return representation
 
 
+class FundModelSerializers(serializers.ModelSerializer):
+    fundAmcName = AmcEntryModelSerializers(read_only=True)
+    fundAmcNameId = serializers.PrimaryKeyRelatedField(
+        queryset=AmcEntryModel.objects.all(),
+        source='fundAmcName',
+        write_only=True
+    )
+
+    class Meta:
+        model = FundModel
+        fields = ['id', 'fundAmcName', 'fundAmcNameId', 'fundName', 'schemeCode', 'hideStatus']
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['fundAmcName'] = instance.fundAmcName.amcName if instance.fundAmcName else None
+        return representation
+
+
 class AumEntryModelSerializers(serializers.ModelSerializer):
     aumArnNumber = serializers.PrimaryKeyRelatedField(queryset=ArnEntryModel.objects.all())
     aumAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
@@ -177,20 +195,23 @@ class GstEntryModelSerializers(serializers.ModelSerializer):
 
 
 class NavModelSerializers(serializers.ModelSerializer):
-    navAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+    navFundName = serializers.SerializerMethodField()
+    amcName = serializers.SerializerMethodField()
 
     class Meta:
         model = NavModel
-        fields = '__all__'
+        fields = ['id', 'nav', 'navDate', 'navFundName', 'amcName']
 
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        representation['navAmcName'] = instance.navAmcName.amcName if instance.navAmcName else None
-        return representation
+    def get_navFundName(self, obj):
+        return obj.navFundName.fundName if obj.navFundName else None
+
+    def get_amcName(self, obj):
+        return obj.navFundName.fundAmcName.amcName if obj.navFundName and obj.navFundName.fundAmcName else None
 
 
 class IssueModelSerializers(serializers.ModelSerializer):
     issueType = serializers.PrimaryKeyRelatedField(queryset=IssueTypeModel.objects.all())
+    issueClientName = serializers.PrimaryKeyRelatedField(queryset=ClientModel.objects.all())
 
     class Meta:
         model = IssueModel
@@ -199,6 +220,7 @@ class IssueModelSerializers(serializers.ModelSerializer):
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation['issueType'] = instance.issueType.issueTypeName if instance.issueType else None
+        representation['issueClientName'] = instance.issueClientName.clientName if instance.issueClientName else None
         return representation
 
 
@@ -470,4 +492,10 @@ class ClientPowerOfAttorneyModelSerializers(serializers.ModelSerializer):
 class ClientGuardianModelSerializers(serializers.ModelSerializer):
     class Meta:
         model = ClientGuardianModel
+        fields = '__all__'
+
+
+class DailyEntryModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = DailyEntryModel
         fields = '__all__'

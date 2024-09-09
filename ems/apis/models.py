@@ -54,6 +54,8 @@ class ModeModel(models.Model):
 class IssueTypeModel(models.Model):
     id = models.AutoField(primary_key=True)
     issueTypeName = models.CharField(max_length=200, null=True, blank=True)
+    estimatedIssueDay = models.IntegerField(default=0)
+    reminderIssueDay = models.IntegerField(default=0)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -166,6 +168,16 @@ class AmcEntryModel(models.Model):
     updatedAt = models.DateTimeField(auto_now=True)
 
 
+class FundModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    fundAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="fundAmcName", null=True, blank=True)
+    fundName = models.CharField(unique=True, max_length=1500, null=True, blank=True)
+    schemeCode = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
 class AumEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
     aumArnNumber = models.ForeignKey(ArnEntryModel, on_delete=models.CASCADE, related_name="aumArnNumber", null=True,
@@ -234,8 +246,8 @@ class GstEntryModel(models.Model):
 
 class NavModel(models.Model):
     id = models.AutoField(primary_key=True)
-    navAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="navAmcName", null=True, blank=True)
-    navFundName = models.CharField(max_length=200, null=True, blank=True)
+    navFundName = models.ForeignKey(FundModel, on_delete=models.CASCADE, related_name="navFundName",
+                                    null=True, blank=True)
     nav = models.CharField(max_length=200, null=True, blank=True)
     navDate = models.DateField(null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
@@ -248,19 +260,6 @@ class NavModel(models.Model):
             Index(fields=['navFundName']),
             Index(fields=['nav']),
         ]
-
-
-class IssueModel(models.Model):
-    id = models.AutoField(primary_key=True)
-    issueName = models.CharField(max_length=200, null=True, blank=True)
-    issueType = models.ForeignKey(IssueTypeModel, on_delete=models.CASCADE, related_name="issueType", null=True,
-                                  blank=True)
-    issueDate = models.DateField(null=True, blank=True)
-    issueResolutionDate = models.DateField(null=True, blank=True)
-    issueDescription = models.CharField(max_length=2500, null=True, blank=True)
-    hideStatus = models.IntegerField(default=0)
-    createdAt = models.DateTimeField(auto_now_add=True)
-    updatedAt = models.DateTimeField(auto_now=True)
 
 
 class StatementModel(models.Model):
@@ -584,20 +583,49 @@ class ClientUploadFileModel(models.Model):
     clientUploadFileId = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="clientUploadFileId",
                                            null=True, blank=True)
     clientPaasPortSizePhoto = models.FileField(upload_to="clientPaasPortSizePhoto/", storage=UniqueFileStorage(),
-                                               null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientPanCardPhoto = models.FileField(upload_to="clientPanCardPhoto/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientAadharCard = models.FileField(upload_to="clientAadharCard/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientDrivingLicense = models.FileField(upload_to="clientDrivingLicense/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientVoterIDFrontImage = models.FileField(upload_to="clientVoterIDFrontImage/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientVoterIDBackImage = models.FileField(upload_to="clientVoterIDBackImage/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientPassportFrontImage = models.FileField(upload_to="clientPassportFrontImage/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientPassportBackImage = models.FileField(upload_to="clientPassportBackImage/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientForeignAddressProof = models.FileField(upload_to="clientForeignAddressProof/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientForeignTaxIdentificationProof = models.FileField(upload_to="clientForeignTaxIdentificationProof/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientCancelledChequeCopy = models.FileField(upload_to="clientCancelledChequeCopy/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientBankAccountStatementOrPassbook = models.FileField(upload_to="clientBankAccountStatementOrPassbook/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientChildrenBirthCertificate = models.FileField(upload_to="clientChildrenBirthCertificate/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
-    clientPowerOfAttorneyUpload = models.FileField(upload_to="clientPowerOfAttorneyUpload/", storage=UniqueFileStorage(), null=True, blank=True, validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+                                               null=True, blank=True, validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientPanCardPhoto = models.FileField(upload_to="clientPanCardPhoto/", storage=UniqueFileStorage(), null=True,
+                                          blank=True, validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientAadharCard = models.FileField(upload_to="clientAadharCard/", storage=UniqueFileStorage(), null=True,
+                                        blank=True,
+                                        validators=[FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientDrivingLicense = models.FileField(upload_to="clientDrivingLicense/", storage=UniqueFileStorage(), null=True,
+                                            blank=True, validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientVoterIDFrontImage = models.FileField(upload_to="clientVoterIDFrontImage/", storage=UniqueFileStorage(),
+                                               null=True, blank=True, validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientVoterIDBackImage = models.FileField(upload_to="clientVoterIDBackImage/", storage=UniqueFileStorage(),
+                                              null=True, blank=True, validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientPassportFrontImage = models.FileField(upload_to="clientPassportFrontImage/", storage=UniqueFileStorage(),
+                                                null=True, blank=True, validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientPassportBackImage = models.FileField(upload_to="clientPassportBackImage/", storage=UniqueFileStorage(),
+                                               null=True, blank=True, validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientForeignAddressProof = models.FileField(upload_to="clientForeignAddressProof/", storage=UniqueFileStorage(),
+                                                 null=True, blank=True, validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientForeignTaxIdentificationProof = models.FileField(upload_to="clientForeignTaxIdentificationProof/",
+                                                           storage=UniqueFileStorage(), null=True, blank=True,
+                                                           validators=[FileExtensionValidator(
+                                                               allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientCancelledChequeCopy = models.FileField(upload_to="clientCancelledChequeCopy/", storage=UniqueFileStorage(),
+                                                 null=True, blank=True, validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientBankAccountStatementOrPassbook = models.FileField(upload_to="clientBankAccountStatementOrPassbook/",
+                                                            storage=UniqueFileStorage(), null=True, blank=True,
+                                                            validators=[FileExtensionValidator(
+                                                                allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientChildrenBirthCertificate = models.FileField(upload_to="clientChildrenBirthCertificate/",
+                                                      storage=UniqueFileStorage(), null=True, blank=True, validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
+    clientPowerOfAttorneyUpload = models.FileField(upload_to="clientPowerOfAttorneyUpload/",
+                                                   storage=UniqueFileStorage(), null=True, blank=True, validators=[
+            FileExtensionValidator(allowed_extensions=["jpg", "jpeg", "pdf"])])
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -673,6 +701,45 @@ class TaskModel(models.Model):
     taskLatitude = models.CharField(max_length=500, null=True, blank=True)
     taskLongtitude = models.CharField(max_length=500, null=True, blank=True)
     taskDescription = models.CharField(max_length=2500, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class IssueModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    issueClientName = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="issueClientName",
+                                        null=True, blank=True)
+    issueType = models.ForeignKey(IssueTypeModel, on_delete=models.CASCADE, related_name="issueType", null=True,
+                                  blank=True)
+    issueDate = models.DateField(null=True, blank=True)
+    issueResolutionDate = models.DateField(null=True, blank=True)
+    issueDescription = models.CharField(max_length=2500, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class DailyEntryModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    applicationDate = models.DateField(null=True, blank=True)
+    dailyEntryClientPanNumber = models.CharField(max_length=55, null=True, blank=True)
+    dailyEntryClientName = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="dailyEntryClientName",
+                                             null=True, blank=True)
+    dailyEntryClientFolioNumber = models.CharField(max_length=55, null=True, blank=True)
+    dailyEntryClientMobileNumber = models.CharField(max_length=55, null=True, blank=True)
+    dailyEntryFundHouse = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="dailyEntryFundHouse",
+                                            null=True, blank=True)
+    dailyEntryFundName = models.ForeignKey(NavModel, on_delete=models.CASCADE, related_name="dailyEntryFundName",
+                                           null=True, blank=True)
+    dailyEntryAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    dailyEntryClientChequeNumber = models.CharField(max_length=55, null=True, blank=True)
+    dailyEntryIssueType = models.ForeignKey(IssueTypeModel, on_delete=models.CASCADE,
+                                            related_name="dailyEntryIssueType",
+                                            null=True, blank=True)
+    dailyEntrySipDate = models.DateField(null=True, blank=True)
+    dailyEntryStaffName = models.CharField(max_length=55, null=True, blank=True)
+    dailyEntryTransactionAddDetails = models.CharField(max_length=2500, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)

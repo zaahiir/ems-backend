@@ -35,22 +35,22 @@ class CustomJSONEncoder(DjangoJSONEncoder):
         return super().default(obj)
 
 
-class CustomPageNumberPagination(PageNumberPagination):
-    page_size = 10
-    page_size_query_param = 'page_size'
-    max_page_size = 100
-
-
-class LargeResultsSetPagination(PageNumberPagination):
-    page_size = 100
-    page_size_query_param = 'page_size'
-    max_page_size = 1000
-
-
-class NavCursorPagination(CursorPagination):
-    page_size = 10
-    ordering = '-navDate'
-    cursor_query_param = 'cursor'
+# class CustomPageNumberPagination(PageNumberPagination):
+#     page_size = 10
+#     page_size_query_param = 'page_size'
+#     max_page_size = 100
+#
+#
+# class LargeResultsSetPagination(PageNumberPagination):
+#     page_size = 100
+#     page_size_query_param = 'page_size'
+#     max_page_size = 1000
+#
+#
+# class NavCursorPagination(CursorPagination):
+#     page_size = 10
+#     ordering = '-navDate'
+#     cursor_query_param = 'cursor'
 
 
 class UserViewSet(viewsets.ViewSet):
@@ -942,6 +942,89 @@ class AmcEntryViewSet(viewsets.ModelViewSet):
         return Response(response)
 
 
+class FundViewSet(viewsets.ModelViewSet):
+    queryset = FundModel.objects.filter(hideStatus=0)
+    serializer_class = FundModelSerializers
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['GET'])
+    def paginated_funds(self, request):
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('page_size', 100))
+        search = request.query_params.get('search', '')
+        amc_id = request.query_params.get('amc_id')
+
+        queryset = self.get_queryset()
+
+        if amc_id:
+            queryset = queryset.filter(fundAmcName_id=amc_id)
+
+        if search:
+            queryset = queryset.filter(Q(fundName__icontains=search) | Q(schemeCode__icontains=search))
+
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        funds = queryset[start:end]
+        total_count = queryset.count()
+
+        serializer = self.get_serializer(funds, many=True)
+
+        return Response({
+            'results': serializer.data,
+            'total_count': total_count,
+            'page': page,
+            'page_size': page_size
+        })
+
+    @action(detail=True, methods=['GET'])
+    def listing(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            if pk == "0":
+                serializer = FundModelSerializers(FundModel.objects.filter(hideStatus=0).order_by('-id'),
+                                                  many=True)
+            else:
+                serializer = FundModelSerializers(FundModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
+                                                  many=True)
+            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+        else:
+            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['POST'])
+    def processing(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            if pk == "0":
+                serializer = FundModelSerializers(data=request.data)
+            else:
+                try:
+                    instance = FundModel.objects.get(id=pk)
+                except FundModel.DoesNotExist:
+                    return Response({'code': 0, 'message': "AMC not found"}, status=404)
+                serializer = FundModelSerializers(instance=instance, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                response = {'code': 1, 'message': "Done Successfully"}
+            else:
+                print("Serializer errors:", serializer.errors)
+                response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def deletion(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            FundModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+
 class AumEntryViewSet(viewsets.ModelViewSet):
     queryset = AumEntryModel.objects.filter(hideStatus=0)
     serializer_class = AumEntryModelSerializers
@@ -1226,18 +1309,12 @@ class NavViewSet(viewsets.ModelViewSet):
         search = request.query_params.get('search', '')
         cursor = request.query_params.get('cursor')
 
-        cache_key = f'nav_list_{cursor}_{page_size}_{search}'
-        cached_data = cache.get(cache_key)
-
-        if cached_data:
-            return Response(cached_data)
-
-        queryset = self.get_queryset().select_related('navAmcName')
+        queryset = self.get_queryset().select_related('navFundName', 'navFundName__fundAmcName')
 
         if search:
             queryset = queryset.filter(
-                Q(navAmcName__amcName__icontains=search) |
-                Q(navFundName__icontains=search) |
+                Q(navFundName__fundAmcName__amcName__icontains=search) |
+                Q(navFundName__fundName__icontains=search) |
                 Q(nav__icontains=search)
             )
 
@@ -1255,19 +1332,11 @@ class NavViewSet(viewsets.ModelViewSet):
             'next_cursor': str(queryset[page_size].id) if len(queryset) > page_size else None
         }
 
-        cache.set(cache_key, data, 300)  # Cache for 5 minutes
-
         return Response(data)
 
     @action(detail=False, methods=['GET'])
     def total_count(self, request):
-        cache_key = 'nav_total_count'
-        total_count = cache.get(cache_key)
-
-        if total_count is None:
-            total_count = self.get_queryset().count()
-            cache.set(cache_key, total_count, 3600)  # Cache for 1 hour
-
+        total_count = self.get_queryset().count()
         return Response({'total_count': total_count})
 
     @action(detail=True, methods=['GET'])
@@ -1359,12 +1428,12 @@ class IssueViewSet(viewsets.ModelViewSet):
         user = request.user
         if user.is_authenticated:
             if pk == "0":
-                serializer = IssueModelSerializers(IssueModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                   many=True)
+                queryset = IssueModel.objects.filter(hideStatus=0).order_by('-id')
             else:
-                serializer = IssueModelSerializers(IssueModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                                                   many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+                queryset = IssueModel.objects.filter(hideStatus=0, id=pk).order_by('-id')
+
+            serializer = IssueModelSerializers(queryset, many=True)
+            response = {'code': 1, 'data': serializer.data, 'message': "All Retrieved"}
         else:
             response = {'code': 0, 'data': [], 'message': "Token is invalid"}
         return Response(response)
@@ -1376,12 +1445,15 @@ class IssueViewSet(viewsets.ModelViewSet):
             if pk == "0":
                 serializer = IssueModelSerializers(data=request.data)
             else:
-                serializer = IssueModelSerializers(instance=IssueModel.objects.get(id=pk), data=request.data)
+                instance = IssueModel.objects.get(id=pk)
+                serializer = IssueModelSerializers(instance=instance, data=request.data, partial=True)
+
             if serializer.is_valid():
                 serializer.save()
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
+                return Response(response, status=status.HTTP_400_BAD_REQUEST)
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1390,7 +1462,9 @@ class IssueViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            IssueModel.objects.filter(id=pk).update(hideStatus=1)
+            issue = IssueModel.objects.get(id=pk)
+            issue.hideStatus = 1
+            issue.save()
             response = {'code': 1, 'message': "Done Successfully"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
@@ -2812,6 +2886,62 @@ class ClientPowerOfAttorneyViewSet(viewsets.ModelViewSet):
         user = request.user
         if user.is_authenticated:
             ClientPowerOfAttorneyModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+
+class DailyEntryViewSet(viewsets.ModelViewSet):
+    queryset = DailyEntryModel.objects.filter(hideStatus=0)
+    serializer_class = DailyEntryModelSerializers
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=True, methods=['GET'])
+    def listing(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            if pk == "0":
+                serializer = DailyEntryModelSerializers(
+                    DailyEntryModel.objects.filter(hideStatus=0).order_by('-id'),
+                    many=True)
+            else:
+                serializer = DailyEntryModelSerializers(
+                    DailyEntryModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
+                    many=True)
+            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+        else:
+            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['POST'])
+    def processing(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            if pk == "0":
+                serializer = DailyEntryModelSerializers(data=request.data)
+            else:
+                instance = DailyEntryModel.objects.get(id=pk)
+                serializer = DailyEntryModelSerializers(instance=instance, data=request.data)
+
+            if serializer.is_valid():
+                if 'clientPowerOfAttorneyUpload' in request.FILES:
+                    file = request.FILES['clientPowerOfAttorneyUpload']
+                    serializer.validated_data['clientPowerOfAttorneyUpload'] = file
+
+                serializer.save()
+                response = {'code': 1, 'message': "Done Successfully"}
+            else:
+                response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def deletion(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            DailyEntryModel.objects.filter(id=pk).update(hideStatus=1)
             response = {'code': 1, 'message': "Done Successfully"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
