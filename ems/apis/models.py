@@ -171,7 +171,7 @@ class AmcEntryModel(models.Model):
 class FundModel(models.Model):
     id = models.AutoField(primary_key=True)
     fundAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="fundAmcName", null=True, blank=True)
-    fundName = models.CharField(unique=True, max_length=1500, null=True, blank=True)
+    fundName = models.CharField(max_length=1500, null=True, blank=True)
     schemeCode = models.CharField(max_length=50, unique=True, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
