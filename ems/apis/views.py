@@ -35,24 +35,6 @@ class CustomJSONEncoder(DjangoJSONEncoder):
         return super().default(obj)
 
 
-# class CustomPageNumberPagination(PageNumberPagination):
-#     page_size = 10
-#     page_size_query_param = 'page_size'
-#     max_page_size = 100
-#
-#
-# class LargeResultsSetPagination(PageNumberPagination):
-#     page_size = 100
-#     page_size_query_param = 'page_size'
-#     max_page_size = 1000
-#
-#
-# class NavCursorPagination(CursorPagination):
-#     page_size = 10
-#     ordering = '-navDate'
-#     cursor_query_param = 'cursor'
-
-
 class UserViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'])
     def login(self, request):
@@ -143,6 +125,7 @@ class UserViewSet(viewsets.ViewSet):
                 'user_type': 'superuser',
                 'user_id': user.id,
                 'username': user.username,
+                'name': user.username,  # Use username as name for superusers
                 'email': user.email,
             }, status=status.HTTP_200_OK)
 
