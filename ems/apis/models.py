@@ -170,7 +170,8 @@ class AmcEntryModel(models.Model):
 
 class FundModel(models.Model):
     id = models.AutoField(primary_key=True)
-    fundAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="fundAmcName", null=True, blank=True)
+    fundAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="fundAmcName", null=True,
+                                    blank=True)
     fundName = models.CharField(max_length=1500, null=True, blank=True)
     schemeCode = models.CharField(max_length=50, unique=True, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
@@ -723,14 +724,18 @@ class IssueModel(models.Model):
 class DailyEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
     applicationDate = models.DateField(null=True, blank=True)
-    dailyEntryClientPanNumber = models.CharField(max_length=55, null=True, blank=True)
+    dailyEntryClientPanNumber = models.ForeignKey(ClientModel, on_delete=models.CASCADE,
+                                                  related_name="dailyEntryClientPanNumber",
+                                                  null=True, blank=True)
     dailyEntryClientName = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="dailyEntryClientName",
                                              null=True, blank=True)
     dailyEntryClientFolioNumber = models.CharField(max_length=55, null=True, blank=True)
-    dailyEntryClientMobileNumber = models.CharField(max_length=55, null=True, blank=True)
+    dailyEntryClientMobileNumber = models.ForeignKey(ClientModel, on_delete=models.CASCADE,
+                                                     related_name="dailyEntryClientMobileNumber",
+                                                     null=True, blank=True)
     dailyEntryFundHouse = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="dailyEntryFundHouse",
                                             null=True, blank=True)
-    dailyEntryFundName = models.ForeignKey(NavModel, on_delete=models.CASCADE, related_name="dailyEntryFundName",
+    dailyEntryFundName = models.ForeignKey(FundModel, on_delete=models.CASCADE, related_name="dailyEntryFundName",
                                            null=True, blank=True)
     dailyEntryAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     dailyEntryClientChequeNumber = models.CharField(max_length=55, null=True, blank=True)

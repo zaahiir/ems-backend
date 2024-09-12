@@ -209,21 +209,6 @@ class NavModelSerializers(serializers.ModelSerializer):
         return obj.navFundName.fundAmcName.amcName if obj.navFundName and obj.navFundName.fundAmcName else None
 
 
-class IssueModelSerializers(serializers.ModelSerializer):
-    issueType = serializers.PrimaryKeyRelatedField(queryset=IssueTypeModel.objects.all())
-    issueClientName = serializers.PrimaryKeyRelatedField(queryset=ClientModel.objects.all())
-
-    class Meta:
-        model = IssueModel
-        fields = '__all__'
-
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        representation['issueType'] = instance.issueType.issueTypeName if instance.issueType else None
-        representation['issueClientName'] = instance.issueClientName.clientName if instance.issueClientName else None
-        return representation
-
-
 class StatementModelSerializers(serializers.ModelSerializer):
     statementAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
 
@@ -495,7 +480,36 @@ class ClientGuardianModelSerializers(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class IssueModelSerializers(serializers.ModelSerializer):
+    issueType = serializers.PrimaryKeyRelatedField(queryset=IssueTypeModel.objects.all())
+    issueClientName = serializers.PrimaryKeyRelatedField(queryset=ClientModel.objects.all())
+
+    class Meta:
+        model = IssueModel
+        fields = '__all__'
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['issueType'] = instance.issueType.issueTypeName if instance.issueType else None
+        representation['issueClientName'] = instance.issueClientName.clientName if instance.issueClientName else None
+        return representation
+
+
 class DailyEntryModelSerializers(serializers.ModelSerializer):
+    dailyEntryClientName = serializers.PrimaryKeyRelatedField(queryset=ClientModel.objects.all())
+    dailyEntryFundName = serializers.PrimaryKeyRelatedField(queryset=FundModel.objects.all())
+    dailyEntryIssueType = serializers.PrimaryKeyRelatedField(queryset=IssueTypeModel.objects.all())
+
     class Meta:
         model = DailyEntryModel
         fields = '__all__'
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation[
+            'dailyEntryClientName'] = instance.dailyEntryClientName.clientName if instance.dailyEntryClientName else None
+        representation[
+            'dailyEntryFundName'] = instance.dailyEntryFundName.fundName if instance.dailyEntryFundName else None
+        representation[
+            'dailyEntryIssueType'] = instance.dailyEntryIssueType.issueTypeName if instance.dailyEntryIssueType else None
+        return representation
