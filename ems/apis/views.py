@@ -931,6 +931,41 @@ class FundViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['GET'])
+    def by_amc(self, request):
+        amc_id = request.query_params.get('amcId')
+        page = int(request.query_params.get('page', 1))
+        page_size = int(request.query_params.get('pageSize', 50))
+        search = request.query_params.get('search', '')
+
+        if not amc_id:
+            return Response({'code': 0, 'message': 'AMC ID is required'})
+
+        funds = FundModel.objects.filter(hideStatus=0, fundAmcName_id=amc_id)
+
+        if search:
+            funds = funds.filter(fundName__icontains=search)
+
+        funds = funds.order_by('fundName')
+
+        paginator = Paginator(funds, page_size)
+
+        try:
+            funds_page = paginator.page(page)
+        except Exception:
+            return Response({'code': 0, 'message': 'Invalid page number'})
+
+        serializer = FundModelSerializers(funds_page, many=True)
+
+        return Response({
+            'code': 1,
+            'data': serializer.data,
+            'message': 'Funds retrieved successfully',
+            'total_pages': paginator.num_pages,
+            'current_page': page,
+            'total_items': paginator.count
+        })
+
+    @action(detail=False, methods=['GET'])
     def paginated_funds(self, request):
         page = int(request.query_params.get('page', 1))
         page_size = int(request.query_params.get('page_size', 100))
