@@ -1468,9 +1468,8 @@ class NavViewSet(viewsets.ModelViewSet):
             return Response({'error': 'AMC ID is required'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            funds = FundModel.objects.filter(fundAmcName_id=amc_id, hideStatus=0)
-            serializer = FundModelSerializers(funds, many=True)
-            return Response({'code': 1, 'data': serializer.data, 'message': 'Funds retrieved successfully'})
+            funds = FundModel.objects.filter(fundAmcName_id=amc_id, hideStatus=0).values('id', 'fundName')
+            return Response({'code': 1, 'data': list(funds), 'message': 'Funds retrieved successfully'})
         except Exception as e:
             return Response({'code': 0, 'message': f'Error retrieving funds: {str(e)}'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
