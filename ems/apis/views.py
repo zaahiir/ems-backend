@@ -9,6 +9,7 @@ from django_countries.fields import Country
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.db import connection
 from django.contrib.auth import authenticate
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
@@ -1434,6 +1435,45 @@ class NavViewSet(viewsets.ModelViewSet):
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def get_nav_update_data(self, request, pk=None):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT * FROM get_nav_update_data(%s)", [pk])
+                result = cursor.fetchone()
+
+            if result:
+                data = {
+                    'navId': result[0],
+                    'nav': float(result[1]),
+                    'navDate': result[2].isoformat(),
+                    'fundId': result[3],
+                    'fundName': result[4],
+                    'schemeCode': result[5],
+                    'amcId': result[6],
+                    'amcName': result[7]
+                }
+                return Response({'code': 1, 'data': data, 'message': 'NAV update data retrieved successfully'})
+            else:
+                return Response({'code': 0, 'message': 'NAV data not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'code': 0, 'message': f'Error retrieving NAV update data: {str(e)}'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['GET'])
+    def funds_by_amc(self, request):
+        amc_id = request.query_params.get('amc_id')
+        if not amc_id:
+            return Response({'error': 'AMC ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            funds = FundModel.objects.filter(fundAmcName_id=amc_id, hideStatus=0)
+            serializer = FundModelSerializers(funds, many=True)
+            return Response({'code': 1, 'data': serializer.data, 'message': 'Funds retrieved successfully'})
+        except Exception as e:
+            return Response({'code': 0, 'message': f'Error retrieving funds: {str(e)}'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class IssueViewSet(viewsets.ModelViewSet):

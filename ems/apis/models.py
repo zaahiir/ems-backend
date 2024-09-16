@@ -168,6 +168,18 @@ class AmcEntryModel(models.Model):
     updatedAt = models.DateTimeField(auto_now=True)
 
 
+class FundManager(models.Manager):
+    def get_funds_by_amc(self, amc_id):
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM get_funds_by_amc(%s)", [amc_id])
+            columns = [col[0] for col in cursor.description]
+            return [
+                dict(zip(columns, row))
+                for row in cursor.fetchall()
+            ]
+
+
 class FundModel(models.Model):
     id = models.AutoField(primary_key=True)
     fundAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="fundAmcName", null=True,
@@ -177,6 +189,8 @@ class FundModel(models.Model):
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
+
+    objects = FundManager()
 
 
 class AumEntryModel(models.Model):
