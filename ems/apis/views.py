@@ -16,7 +16,7 @@ from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 import urllib.parse
 from .serializers import *
 from django.http import JsonResponse
-from datetime import datetime
+from datetime import datetime, timedelta
 from .utils import get_tokens_for_user
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.pagination import CursorPagination
@@ -2954,6 +2954,98 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
     serializer_class = DailyEntryModelSerializers
     permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=['GET'])
+    def get_client_details(self, request):
+        search_term = request.query_params.get('search_term')
+        if not search_term:
+            return Response({'code': 0, 'message': 'Search term is required'})
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM get_client_details(%s)", [search_term])
+            columns = [col[0] for col in cursor.description]
+            client = cursor.fetchone()
+
+        if client:
+            client_data = dict(zip(columns, client))
+            return Response({'code': 1, 'data': client_data, 'message': 'Client details retrieved successfully'})
+        else:
+            return Response({'code': 0, 'message': 'Client not found'})
+
+    @action(detail=False, methods=['GET'])
+    def get_funds_by_amc(self, request):
+        amc_id = request.query_params.get('amc_id')
+        if not amc_id:
+            return Response({'code': 0, 'message': 'AMC ID is required'})
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM get_funds_by_amc(%s)", [amc_id])
+            funds = [{'id': row[0], 'fundName': row[1], 'schemeCode': row[2]} for row in cursor.fetchall()]
+
+        return Response({'code': 1, 'data': funds, 'message': 'Funds retrieved successfully'})
+
+    @action(detail=False, methods=['POST'])
+    @transaction.atomic
+    def processing(self, request):
+        user = request.user
+        if user.is_authenticated:
+            data = request.data
+            try:
+                # Get or create ClientModel instance
+                client, _ = ClientModel.objects.get_or_create(
+                    clientPanNo=data['dailyEntryClientPanNumber'],
+                    defaults={
+                        'clientName': data['dailyEntryClientName'],
+                        'clientPhone': data['dailyEntryClientMobileNumber']
+                    }
+                )
+
+                # Get related objects
+                fund_house = AmcEntryModel.objects.get(id=data['dailyEntryFundHouse'])
+                fund = FundModel.objects.get(id=data['dailyEntryFundName'])
+                issue_type = IssueTypeModel.objects.get(id=data['dailyEntryIssueType'])
+
+                # Create DailyEntryModel instance
+                daily_entry = DailyEntryModel.objects.create(
+                    applicationDate=datetime.strptime(data['applicationDate'], '%Y-%m-%d').date(),
+                    dailyEntryClientPanNumber=client,
+                    dailyEntryClientName=client,
+                    dailyEntryClientFolioNumber=data['clientFolioNumber'],
+                    dailyEntryClientMobileNumber=client,
+                    dailyEntryFundHouse=fund_house,
+                    dailyEntryFundName=fund,
+                    dailyEntryAmount=data['amount'],
+                    dailyEntryClientChequeNumber=data['clientChequeNumber'],
+                    dailyEntryIssueType=issue_type,
+                    dailyEntrySipDate=datetime.strptime(data['sipDate'], '%Y-%m-%d').date() if data[
+                        'sipDate'] else None,
+                    dailyEntryStaffName=data['staffName'],
+                    dailyEntryTransactionAddDetails=data.get('transactionAddDetail', '')
+                )
+
+                # Calculate issue resolution date
+                issue_resolution_date = daily_entry.applicationDate + timedelta(days=issue_type.estimatedIssueDay)
+
+                # Create IssueModel instance
+                issue = IssueModel.objects.create(
+                    issueClientName=client,
+                    issueType=issue_type,
+                    issueDate=daily_entry.applicationDate,
+                    issueResolutionDate=issue_resolution_date,
+                    issueDescription=data.get('transactionAddDetail', '')
+                )
+
+                return Response({
+                    'code': 1,
+                    'message': 'Daily entry and issue created successfully',
+                    'daily_entry_id': daily_entry.id,
+                    'issue_id': issue.id
+                })
+            except Exception as e:
+                transaction.set_rollback(True)
+                return Response({'code': 0, 'message': f'Failed to create daily entry and issue: {str(e)}'})
+        else:
+            return Response({'code': 0, 'message': 'Token is invalid'})
+
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
         user = request.user
@@ -2969,29 +3061,6 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
             response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
         else:
             response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = DailyEntryModelSerializers(data=request.data)
-            else:
-                instance = DailyEntryModel.objects.get(id=pk)
-                serializer = DailyEntryModelSerializers(instance=instance, data=request.data)
-
-            if serializer.is_valid():
-                if 'clientPowerOfAttorneyUpload' in request.FILES:
-                    file = request.FILES['clientPowerOfAttorneyUpload']
-                    serializer.validated_data['clientPowerOfAttorneyUpload'] = file
-
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
     @action(detail=True, methods=['GET'])
