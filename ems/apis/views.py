@@ -17,6 +17,7 @@ import urllib.parse
 from .serializers import *
 from django.http import JsonResponse
 from datetime import datetime, timedelta
+from django.utils import timezone
 from .utils import get_tokens_for_user
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.pagination import CursorPagination
@@ -2954,34 +2955,14 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
     serializer_class = DailyEntryModelSerializers
     permission_classes = [IsAuthenticated]
 
-    @action(detail=False, methods=['GET'])
-    def get_client_details(self, request):
-        search_term = request.query_params.get('search_term')
-        if not search_term:
-            return Response({'code': 0, 'message': 'Search term is required'})
-
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM get_client_details(%s)", [search_term])
-            columns = [col[0] for col in cursor.description]
-            client = cursor.fetchone()
-
-        if client:
-            client_data = dict(zip(columns, client))
-            return Response({'code': 1, 'data': client_data, 'message': 'Client details retrieved successfully'})
-        else:
-            return Response({'code': 0, 'message': 'Client not found'})
-
-    @action(detail=False, methods=['GET'])
-    def get_funds_by_amc(self, request):
-        amc_id = request.query_params.get('amc_id')
-        if not amc_id:
-            return Response({'code': 0, 'message': 'AMC ID is required'})
-
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM get_funds_by_amc(%s)", [amc_id])
-            funds = [{'id': row[0], 'fundName': row[1], 'schemeCode': row[2]} for row in cursor.fetchall()]
-
-        return Response({'code': 1, 'data': funds, 'message': 'Funds retrieved successfully'})
+    def calculate_working_days(self, start_date, days):
+        current_date = start_date
+        working_days = 0
+        while working_days < days:
+            current_date += timedelta(days=1)
+            if current_date.weekday() < 5:  # Monday = 0, Friday = 4
+                working_days += 1
+        return current_date
 
     @action(detail=False, methods=['POST'])
     @transaction.atomic
@@ -3016,14 +2997,16 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                     dailyEntryAmount=data['amount'],
                     dailyEntryClientChequeNumber=data['clientChequeNumber'],
                     dailyEntryIssueType=issue_type,
-                    dailyEntrySipDate=datetime.strptime(data['sipDate'], '%Y-%m-%d').date() if data[
-                        'sipDate'] else None,
+                    dailyEntrySipDate=datetime.strptime(data['sipDate'], '%Y-%m-%d').date() if data['sipDate'] else None,
                     dailyEntryStaffName=data['staffName'],
                     dailyEntryTransactionAddDetails=data.get('transactionAddDetail', '')
                 )
 
-                # Calculate issue resolution date
-                issue_resolution_date = daily_entry.applicationDate + timedelta(days=issue_type.estimatedIssueDay)
+                # Calculate issue resolution date considering only working days
+                issue_resolution_date = self.calculate_working_days(
+                    daily_entry.applicationDate,
+                    issue_type.estimatedIssueDay
+                )
 
                 # Create IssueModel instance
                 issue = IssueModel.objects.create(
@@ -3045,6 +3028,35 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                 return Response({'code': 0, 'message': f'Failed to create daily entry and issue: {str(e)}'})
         else:
             return Response({'code': 0, 'message': 'Token is invalid'})
+
+    @action(detail=False, methods=['GET'])
+    def get_client_details(self, request):
+        search_term = request.query_params.get('search_term')
+        if not search_term:
+            return Response({'code': 0, 'message': 'Search term is required'})
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM get_client_details(%s)", [search_term])
+            columns = [col[0] for col in cursor.description]
+            client = cursor.fetchone()
+
+        if client:
+            client_data = dict(zip(columns, client))
+            return Response({'code': 1, 'data': client_data, 'message': 'Client details retrieved successfully'})
+        else:
+            return Response({'code': 0, 'message': 'Client not found'})
+
+    @action(detail=False, methods=['GET'])
+    def get_funds_by_amc(self, request):
+        amc_id = request.query_params.get('amc_id')
+        if not amc_id:
+            return Response({'code': 0, 'message': 'AMC ID is required'})
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT * FROM get_funds_by_amc(%s)", [amc_id])
+            funds = [{'id': row[0], 'fundName': row[1], 'schemeCode': row[2]} for row in cursor.fetchall()]
+
+        return Response({'code': 1, 'data': funds, 'message': 'Funds retrieved successfully'})
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
