@@ -497,6 +497,8 @@ class IssueModelSerializers(serializers.ModelSerializer):
 
 class DailyEntryModelSerializers(serializers.ModelSerializer):
     dailyEntryClientName = serializers.PrimaryKeyRelatedField(queryset=ClientModel.objects.all())
+    dailyEntryClientPanNumber = serializers.PrimaryKeyRelatedField(queryset=ClientModel.objects.all())
+    dailyEntryClientMobileNumber = serializers.PrimaryKeyRelatedField(queryset=ClientModel.objects.all())
     dailyEntryFundName = serializers.PrimaryKeyRelatedField(queryset=FundModel.objects.all())
     dailyEntryIssueType = serializers.PrimaryKeyRelatedField(queryset=IssueTypeModel.objects.all())
 
@@ -508,6 +510,10 @@ class DailyEntryModelSerializers(serializers.ModelSerializer):
         representation = super().to_representation(instance)
         representation[
             'dailyEntryClientName'] = instance.dailyEntryClientName.clientName if instance.dailyEntryClientName else None
+        representation[
+            'dailyEntryClientPanNumber'] = instance.dailyEntryClientPanNumber.clientPanNo if instance.dailyEntryClientPanNumber else None
+        representation[
+            'dailyEntryClientMobileNumber'] = instance.dailyEntryClientMobileNumber.clientPhone if instance.dailyEntryClientMobileNumber else None
         representation[
             'dailyEntryFundName'] = instance.dailyEntryFundName.fundName if instance.dailyEntryFundName else None
         representation[

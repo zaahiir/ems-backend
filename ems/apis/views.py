@@ -3049,11 +3049,11 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['GET'])
     def get_funds_by_amc(self, request):
         amc_id = request.query_params.get('amc_id')
-        if not amc_id:
-            return Response({'code': 0, 'message': 'AMC ID is required'})
+        if not amc_id or not amc_id.isdigit():
+            return Response({'code': 0, 'message': 'Valid AMC ID is required'}, status=400)
 
         with connection.cursor() as cursor:
-            cursor.execute("SELECT * FROM get_funds_by_amc(%s)", [amc_id])
+            cursor.execute("SELECT * FROM get_funds_by_amc(%s)", [int(amc_id)])
             funds = [{'id': row[0], 'fundName': row[1], 'schemeCode': row[2]} for row in cursor.fetchall()]
 
         return Response({'code': 1, 'data': funds, 'message': 'Funds retrieved successfully'})
