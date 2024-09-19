@@ -721,20 +721,6 @@ class TaskModel(models.Model):
     updatedAt = models.DateTimeField(auto_now=True)
 
 
-class IssueModel(models.Model):
-    id = models.AutoField(primary_key=True)
-    issueClientName = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="issueClientName",
-                                        null=True, blank=True)
-    issueType = models.ForeignKey(IssueTypeModel, on_delete=models.CASCADE, related_name="issueType", null=True,
-                                  blank=True)
-    issueDate = models.DateField(null=True, blank=True)
-    issueResolutionDate = models.DateField(null=True, blank=True)
-    issueDescription = models.CharField(max_length=2500, null=True, blank=True)
-    hideStatus = models.IntegerField(default=0)
-    createdAt = models.DateTimeField(auto_now_add=True)
-    updatedAt = models.DateTimeField(auto_now=True)
-
-
 class DailyEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
     applicationDate = models.DateField(null=True, blank=True)
@@ -759,6 +745,22 @@ class DailyEntryModel(models.Model):
     dailyEntrySipDate = models.DateField(null=True, blank=True)
     dailyEntryStaffName = models.CharField(max_length=55, null=True, blank=True)
     dailyEntryTransactionAddDetails = models.CharField(max_length=2500, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class IssueModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    issueDailyEntry = models.OneToOneField(DailyEntryModel, on_delete=models.CASCADE, related_name='issueDailyEntry',
+                                       null=True, blank=True)
+    issueClientName = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="issueClientName",
+                                        null=True, blank=True)
+    issueType = models.ForeignKey(IssueTypeModel, on_delete=models.CASCADE, related_name="issueType", null=True,
+                                  blank=True)
+    issueDate = models.DateField(null=True, blank=True)
+    issueResolutionDate = models.DateField(null=True, blank=True)
+    issueDescription = models.CharField(max_length=2500, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
