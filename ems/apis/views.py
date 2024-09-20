@@ -1373,23 +1373,48 @@ class NavViewSet(viewsets.ModelViewSet):
             return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
+    @transaction.atomic
     def processing(self, request, pk=None):
         user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = NavModelSerializers(data=request.data)
-            else:
-                instance = NavModel.objects.get(id=pk)
-                serializer = NavModelSerializers(instance=instance, data=request.data)
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
 
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
+        data = request.data
+        amc_id = data.get('navAmcName')
+        fund_id = data.get('navFundName')
+        nav = data.get('nav')
+        nav_date = data.get('navDate')
+
+        try:
+            amc = AmcEntryModel.objects.get(id=amc_id)
+            fund = FundModel.objects.get(id=fund_id)
+
+            # Update fund's AMC if it has changed
+            if fund.fundAmcName_id != amc.id:
+                fund.fundAmcName = amc
+                fund.save()
+
+            # Create or update NAV entry
+            if pk == "0":
+                nav_entry = NavModel.objects.create(
+                    navFundName=fund,
+                    nav=nav,
+                    navDate=nav_date
+                )
             else:
-                response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
+                nav_entry = NavModel.objects.get(id=pk)
+                nav_entry.navFundName = fund
+                nav_entry.nav = nav
+                nav_entry.navDate = nav_date
+                nav_entry.save()
+
+            serializer = self.get_serializer(nav_entry)
+            return Response({'code': 1, 'data': serializer.data, 'message': "Done Successfully"})
+
+        except (AmcEntryModel.DoesNotExist, FundModel.DoesNotExist, NavModel.DoesNotExist) as e:
+            return Response({'code': 0, 'message': str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'code': 0, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['POST'])
     def fetch(self, request):
@@ -1517,16 +1542,37 @@ class IssueViewSet(viewsets.ModelViewSet):
         return Response(response)
 
     @action(detail=True, methods=['GET'])
+    @transaction.atomic
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            issue = IssueModel.objects.get(id=pk)
-            issue.hideStatus = 1
-            issue.save()
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                # Get the issue instance
+                issue = IssueModel.objects.get(id=pk)
+
+                # Update the issue's hideStatus
+                issue.hideStatus = 1
+                issue.save()
+
+                # If there's an associated daily entry, update it
+                if issue.issueDailyEntry:
+                    daily_entry = issue.issueDailyEntry
+                    daily_entry.dailyEntryIssueType = None
+                    daily_entry.save()
+
+                # Delete dailyEntryIssueType for all related DailyEntryModel instances
+                DailyEntryModel.objects.filter(dailyEntryIssueType=issue.issueType).update(dailyEntryIssueType=None)
+
+                return Response({'code': 1, 'message': "Issue deleted successfully, daily entries updated"})
+            except IssueModel.DoesNotExist:
+                return Response({'code': 0, 'message': "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
+            except Exception as e:
+                # Rollback the transaction in case of any error
+                transaction.set_rollback(True)
+                return Response({'code': 0, 'message': f"An error occurred: {str(e)}"},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 class StatementViewSet(viewsets.ModelViewSet):
