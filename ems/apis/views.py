@@ -3014,92 +3014,89 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def processing(self, request, pk=None):
         user = request.user
-        if user.is_authenticated:
-            data = request.data
-            try:
-                if pk == "0":
-                    # Create new instances
-                    client, _ = ClientModel.objects.get_or_create(
-                        clientPanNo=data['dailyEntryClientPanNumber'],
-                        defaults={
-                            'clientName': data['dailyEntryClientName'],
-                            'clientPhone': data['dailyEntryClientMobileNumber']
-                        }
-                    )
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': 'Token is invalid'})
 
-                    fund_house = AmcEntryModel.objects.get(id=data['dailyEntryFundHouse'])
-                    fund = FundModel.objects.get(id=data['dailyEntryFundName'])
-                    issue_type = IssueTypeModel.objects.get(id=data['dailyEntryIssueType'])
-
-                    issueDailyEntry = DailyEntryModel(
-                        dailyEntryClientPanNumber=client,
-                        dailyEntryClientName=client,
-                        dailyEntryClientMobileNumber=client,
-                        dailyEntryFundHouse=fund_house,
-                        dailyEntryFundName=fund,
-                        dailyEntryIssueType=issue_type,
-                    )
-                    is_new = True
-                else:
-                    # Update existing instance
-                    issueDailyEntry = DailyEntryModel.objects.get(id=pk)
-                    client = issueDailyEntry.dailyEntryClientPanNumber
-                    is_new = False
-
-                    # Update fund house, fund name, and issue type
-                    issueDailyEntry.dailyEntryFundHouse = AmcEntryModel.objects.get(id=data['dailyEntryFundHouse'])
-                    issueDailyEntry.dailyEntryFundName = FundModel.objects.get(id=data['dailyEntryFundName'])
-                    issueDailyEntry.dailyEntryIssueType = IssueTypeModel.objects.get(id=data['dailyEntryIssueType'])
-
-                # Update fields for both create and update operations
-                issueDailyEntry.applicationDate = datetime.strptime(data['applicationDate'], '%Y-%m-%d').date()
-                issueDailyEntry.dailyEntryClientFolioNumber = data['clientFolioNumber']
-                issueDailyEntry.dailyEntryAmount = data['amount']
-                issueDailyEntry.dailyEntryClientChequeNumber = data['clientChequeNumber']
-                issueDailyEntry.dailyEntrySipDate = datetime.strptime(data['sipDate'], '%Y-%m-%d').date() if data[
-                    'sipDate'] else None
-                issueDailyEntry.dailyEntryStaffName = data['staffName']
-                issueDailyEntry.dailyEntryTransactionAddDetails = data.get('transactionAddDetail', '')
-
-                issueDailyEntry.save()
-
-                # Calculate issue resolution date considering only working days
-                issue_resolution_date = self.calculate_working_days(
-                    issueDailyEntry.applicationDate,
-                    issueDailyEntry.dailyEntryIssueType.estimatedIssueDay
+        data = request.data
+        try:
+            if pk == "0":
+                # Create new instances
+                client, _ = ClientModel.objects.get_or_create(
+                    clientPanNo=data['dailyEntryClientPanNumber'],
+                    defaults={
+                        'clientName': data['dailyEntryClientName'],
+                        'clientPhone': data['dailyEntryClientMobileNumber']
+                    }
                 )
 
-                # Handle IssueModel
-                if is_new or not hasattr(issueDailyEntry, 'issueDailyEntry'):
-                    # Create new IssueModel instance
-                    issue = IssueModel.objects.create(
-                        issueClientName=client,
-                        issueType=issueDailyEntry.dailyEntryIssueType,
-                        issueDate=issueDailyEntry.applicationDate,
-                        issueResolutionDate=issue_resolution_date,
-                        issueDescription=data.get('transactionAddDetail', ''),
-                        issueDailyEntry=issueDailyEntry
-                    )
-                else:
-                    # Update existing IssueModel instance
-                    issue = issueDailyEntry.issueDailyEntry
-                    issue.issueType = issueDailyEntry.dailyEntryIssueType
-                    issue.issueDate = issueDailyEntry.applicationDate
-                    issue.issueResolutionDate = issue_resolution_date
-                    issue.issueDescription = data.get('transactionAddDetail', '')
-                    issue.save()
+                fund_house = AmcEntryModel.objects.get(id=data['dailyEntryFundHouse'])
+                fund = FundModel.objects.get(id=data['dailyEntryFundName'])
+                issue_type = IssueTypeModel.objects.get(id=data['dailyEntryIssueType'])
 
-                return Response({
-                    'code': 1,
-                    'message': 'Daily entry and issue processed successfully',
-                    'issueDailyEntry_id': issueDailyEntry.id,
-                    'issue_id': issue.id
-                })
-            except Exception as e:
-                transaction.set_rollback(True)
-                return Response({'code': 0, 'message': f'Failed to process daily entry and issue: {str(e)}'})
-        else:
-            return Response({'code': 0, 'message': 'Token is invalid'})
+                issueDailyEntry = DailyEntryModel(
+                    dailyEntryClientPanNumber=client,
+                    dailyEntryClientName=client,
+                    dailyEntryClientMobileNumber=client,
+                    dailyEntryFundHouse=fund_house,
+                    dailyEntryFundName=fund,
+                    dailyEntryIssueType=issue_type,
+                )
+                is_new = True
+            else:
+                # Update existing instance
+                issueDailyEntry = DailyEntryModel.objects.get(id=pk)
+                client = issueDailyEntry.dailyEntryClientPanNumber
+                is_new = False
+
+                # Update fund house and fund name
+                issueDailyEntry.dailyEntryFundHouse = AmcEntryModel.objects.get(id=data['dailyEntryFundHouse'])
+                issueDailyEntry.dailyEntryFundName = FundModel.objects.get(id=data['dailyEntryFundName'])
+
+                # Handle issue type update
+                new_issue_type = IssueTypeModel.objects.get(id=data['dailyEntryIssueType'])
+                if issueDailyEntry.dailyEntryIssueType is None or issueDailyEntry.dailyEntryIssueType != new_issue_type:
+                    issueDailyEntry.dailyEntryIssueType = new_issue_type
+
+            # Update fields for both create and update operations
+            issueDailyEntry.applicationDate = datetime.strptime(data['applicationDate'], '%Y-%m-%d').date()
+            issueDailyEntry.dailyEntryClientFolioNumber = data['clientFolioNumber']
+            issueDailyEntry.dailyEntryAmount = data['amount']
+            issueDailyEntry.dailyEntryClientChequeNumber = data['clientChequeNumber']
+            issueDailyEntry.dailyEntrySipDate = datetime.strptime(data['sipDate'], '%Y-%m-%d').date() if data[
+                'sipDate'] else None
+            issueDailyEntry.dailyEntryStaffName = data['staffName']
+            issueDailyEntry.dailyEntryTransactionAddDetails = data.get('transactionAddDetail', '')
+
+            issueDailyEntry.save()
+
+            # Calculate issue resolution date considering only working days
+            issue_resolution_date = self.calculate_working_days(
+                issueDailyEntry.applicationDate,
+                issueDailyEntry.dailyEntryIssueType.estimatedIssueDay
+            )
+
+            # Handle IssueModel
+            issue, created = IssueModel.objects.update_or_create(
+                issueDailyEntry=issueDailyEntry,
+                defaults={
+                    'issueClientName': client,
+                    'issueType': issueDailyEntry.dailyEntryIssueType,
+                    'issueDate': issueDailyEntry.applicationDate,
+                    'issueResolutionDate': issue_resolution_date,
+                    'issueDescription': data.get('transactionAddDetail', ''),
+                    'hideStatus': 0  # Ensure the issue is not hidden
+                }
+            )
+
+            return Response({
+                'code': 1,
+                'message': 'Daily entry and issue processed successfully',
+                'issueDailyEntry_id': issueDailyEntry.id,
+                'issue_id': issue.id
+            })
+        except Exception as e:
+            transaction.set_rollback(True)
+            return Response({'code': 0, 'message': f'Failed to process daily entry and issue: {str(e)}'})
 
     @action(detail=False, methods=['GET'])
     def get_client_details(self, request):
