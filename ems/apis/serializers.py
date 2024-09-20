@@ -230,6 +230,7 @@ class CourierFileModelSerializers(serializers.ModelSerializer):
 
 
 class CourierModelSerializers(serializers.ModelSerializer):
+    courierClientName = serializers.PrimaryKeyRelatedField(queryset=ClientModel.objects.all())
     courierFile = serializers.ListField(
         child=serializers.FileField(
             max_length=100000,
@@ -247,6 +248,14 @@ class CourierModelSerializers(serializers.ModelSerializer):
     class Meta:
         model = CourierModel
         fields = '__all__'
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        representation['courierClientName'] = {
+            'id': instance.courierClientName.id,
+            'clientName': instance.courierClientName.clientName
+        } if instance.courierClientName else None
+        return representation
 
     def create(self, validated_data):
         files_data = validated_data.pop('courierFile', None)

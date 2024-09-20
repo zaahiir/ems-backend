@@ -302,28 +302,6 @@ class StatementModel(models.Model):
     updatedAt = models.DateTimeField(auto_now=True)
 
 
-class CourierModel(models.Model):
-    id = models.AutoField(primary_key=True)
-    courierClientName = models.CharField(max_length=200, null=True, blank=True)
-    courierClientAddress = models.CharField(max_length=500, null=True, blank=True)
-    courierMobileNumber = models.CharField(max_length=200, null=True, blank=True)
-    courierEmail = models.EmailField(unique=True)
-    hideStatus = models.IntegerField(default=0)
-    createdAt = models.DateTimeField(auto_now_add=True)
-    updatedAt = models.DateTimeField(auto_now=True)
-
-
-class CourierFileModel(models.Model):
-    id = models.AutoField(primary_key=True)
-    courier = models.ForeignKey(CourierModel, related_name='courier', on_delete=models.CASCADE)
-    courierFile = models.FileField(upload_to="courierFile/",
-                                   storage=UniqueFileStorage(), null=True, blank=True,
-                                   validators=[FileExtensionValidator(allowed_extensions=["pdf", "doc", "docx"])])
-    hideStatus = models.IntegerField(default=0)
-    createdAt = models.DateTimeField(auto_now_add=True)
-    updatedAt = models.DateTimeField(auto_now=True)
-
-
 class FormsModel(models.Model):
     id = models.AutoField(primary_key=True)
     formsAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="formsAmcName", null=True,
@@ -701,6 +679,29 @@ class ClientGuardianModel(models.Model):
     clientGuardianRelation = models.ForeignKey(RelationshipModel, on_delete=models.CASCADE,
                                                related_name="clientGuardianRelation", null=True, blank=True)
     clientGuardianPanNo = models.CharField(max_length=500, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class CourierModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    courierClientName = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="courierClientName",
+                                        null=True, blank=True)
+    courierClientAddress = models.CharField(max_length=500, null=True, blank=True)
+    courierMobileNumber = models.CharField(max_length=200, null=True, blank=True)
+    courierEmail = models.EmailField(unique=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class CourierFileModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    courier = models.ForeignKey(CourierModel, related_name='courier', on_delete=models.CASCADE)
+    courierFile = models.FileField(upload_to="courierFile/",
+                                   storage=UniqueFileStorage(), null=True, blank=True,
+                                   validators=[FileExtensionValidator(allowed_extensions=["pdf", "doc", "docx"])])
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
