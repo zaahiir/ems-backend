@@ -251,10 +251,8 @@ class CourierModelSerializers(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation['courierClientName'] = {
-            'id': instance.courierClientName.id,
-            'clientName': instance.courierClientName.clientName
-        } if instance.courierClientName else None
+        representation[
+            'courierClientName'] = instance.courierClientName.clientName if instance.courierClientName else None
         return representation
 
     def create(self, validated_data):
