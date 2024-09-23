@@ -174,7 +174,7 @@ class Command(BaseCommand):
 
                 except Exception as e:
                     logger.error(f"Error processing line: {line}. Error: {str(e)}")
-                    continue  # Skip this line and continue with the next one
+                    continue
 
         if nav_data:
             self.bulk_update_or_create_nav(nav_data)
@@ -188,7 +188,6 @@ class Command(BaseCommand):
             amc_cache[amc_name] = amc
         return amc_cache[amc_name]
 
-    @transaction.atomic
     def get_or_create_fund(self, amc_entry, fund_name, scheme_code, fund_cache):
         key = (amc_entry.id, fund_name)
         if key not in fund_cache:
@@ -198,14 +197,31 @@ class Command(BaseCommand):
                     fundName=fund_name
                 )
                 if fund.schemeCode != scheme_code and scheme_code and scheme_code != '-':
-                    fund.schemeCode = scheme_code
-                    fund.save()
+                    existing_fund = FundModel.objects.filter(schemeCode=scheme_code).first()
+                    if existing_fund:
+                        if existing_fund.fundName != fund_name:
+                            logger.warning(
+                                f"SchemeCode {scheme_code} conflict: '{fund_name}' vs '{existing_fund.fundName}'. Using existing fund.")
+                            fund = existing_fund
+                        else:
+                            logger.info(f"Updating schemeCode for '{fund_name}' to {scheme_code}")
+                            fund.schemeCode = scheme_code
+                            fund.save()
+                    else:
+                        fund.schemeCode = scheme_code
+                        fund.save()
             except FundModel.DoesNotExist:
-                fund = FundModel.objects.create(
-                    fundAmcName=amc_entry,
-                    fundName=fund_name,
-                    schemeCode=scheme_code if scheme_code and scheme_code != '-' else None
-                )
+                existing_fund = FundModel.objects.filter(schemeCode=scheme_code).first()
+                if existing_fund:
+                    logger.warning(
+                        f"SchemeCode {scheme_code} already exists for '{existing_fund.fundName}'. Using existing fund.")
+                    fund = existing_fund
+                else:
+                    fund = FundModel.objects.create(
+                        fundAmcName=amc_entry,
+                        fundName=fund_name,
+                        schemeCode=scheme_code if scheme_code and scheme_code != '-' else None
+                    )
             fund_cache[key] = fund
         return fund_cache[key]
 
