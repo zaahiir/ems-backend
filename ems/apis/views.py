@@ -1314,193 +1314,6 @@ class GstEntryViewSet(viewsets.ModelViewSet):
         return Response(response)
 
 
-class NavViewSet(viewsets.ModelViewSet):
-    queryset = NavModel.objects.filter(hideStatus=0).order_by('-createdAt')
-    serializer_class = NavModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    @action(detail=False, methods=['GET'])
-    def listing(self, request):
-        user = request.user
-        if not user.is_authenticated:
-            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
-
-        page_size = int(request.query_params.get('page_size', 10))
-        search = request.query_params.get('search', '')
-        cursor = request.query_params.get('cursor')
-
-        queryset = self.get_queryset().select_related('navFundName', 'navFundName__fundAmcName')
-
-        if search:
-            queryset = queryset.filter(
-                Q(navFundName__fundAmcName__amcName__icontains=search) |
-                Q(navFundName__fundName__icontains=search) |
-                Q(nav__icontains=search)
-            )
-
-        if cursor:
-            queryset = queryset.filter(id__lt=cursor)
-
-        queryset = queryset.order_by('-id')[:page_size + 1]
-
-        serializer = self.get_serializer(queryset[:page_size], many=True)
-
-        data = {
-            'code': 1,
-            'data': serializer.data,
-            'message': "Retrieved Successfully",
-            'next_cursor': str(queryset[page_size].id) if len(queryset) > page_size else None
-        }
-
-        return Response(data)
-
-    @action(detail=False, methods=['GET'])
-    def total_count(self, request):
-        total_count = self.get_queryset().count()
-        return Response({'total_count': total_count})
-
-    @action(detail=True, methods=['GET'])
-    def list_for_update(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            try:
-                instance = NavModel.objects.get(id=pk)
-                serializer = NavModelSerializers(instance)
-                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
-            except NavModel.DoesNotExist:
-                return Response({'code': 0, 'message': "NAV not found"}, status=404)
-        else:
-            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
-
-    @action(detail=True, methods=['POST'])
-    @transaction.atomic
-    def processing(self, request, pk=None):
-        user = request.user
-        if not user.is_authenticated:
-            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
-
-        data = request.data
-        amc_id = data.get('navAmcName')
-        fund_id = data.get('navFundName')
-        nav = data.get('nav')
-        nav_date = data.get('navDate')
-
-        try:
-            amc = AmcEntryModel.objects.get(id=amc_id)
-            fund = FundModel.objects.get(id=fund_id)
-
-            # Update fund's AMC if it has changed
-            if fund.fundAmcName_id != amc.id:
-                fund.fundAmcName = amc
-                fund.save()
-
-            # Create or update NAV entry
-            if pk == "0":
-                nav_entry = NavModel.objects.create(
-                    navFundName=fund,
-                    nav=nav,
-                    navDate=nav_date
-                )
-            else:
-                nav_entry = NavModel.objects.get(id=pk)
-                nav_entry.navFundName = fund
-                nav_entry.nav = nav
-                nav_entry.navDate = nav_date
-                nav_entry.save()
-
-            serializer = self.get_serializer(nav_entry)
-            return Response({'code': 1, 'data': serializer.data, 'message': "Done Successfully"})
-
-        except (AmcEntryModel.DoesNotExist, FundModel.DoesNotExist, NavModel.DoesNotExist) as e:
-            return Response({'code': 0, 'message': str(e)}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({'code': 0, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    @action(detail=False, methods=['POST'])
-    def fetch(self, request):
-        user = request.user
-        if user.is_authenticated:
-            date = request.data.get('date')
-            start_date = request.data.get('start_date')
-            end_date = request.data.get('end_date')
-
-            try:
-                if date:
-                    call_command('fetch_nav_data', date=date)
-                    message = f"NAV data fetched successfully for {date}"
-                elif start_date and end_date:
-                    call_command('fetch_nav_data', start_date=start_date, end_date=end_date)
-                    message = f"Historic NAV data fetched successfully from {start_date} to {end_date}"
-                else:
-                    return Response({
-                        'code': 0,
-                        'message': "Invalid parameters. Provide either 'date' or both 'start_date' and 'end_date'."
-                    }, status=status.HTTP_400_BAD_REQUEST)
-
-                return Response({
-                    'code': 1,
-                    'message': message
-                }, status=status.HTTP_200_OK)
-            except Exception as e:
-                return Response({
-                    'code': 0,
-                    'message': f"Error fetching NAV data: {str(e)}"
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        else:
-            return Response({
-                'code': 0,
-                'message': "Token is invalid"
-            }, status=status.HTTP_401_UNAUTHORIZED)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            NavModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def get_nav_update_data(self, request, pk=None):
-        try:
-            with connection.cursor() as cursor:
-                cursor.execute("SELECT * FROM get_nav_update_data(%s)", [pk])
-                result = cursor.fetchone()
-
-            if result:
-                data = {
-                    'navId': result[0],
-                    'nav': float(result[1]),
-                    'navDate': result[2].isoformat(),
-                    'fundId': result[3],
-                    'fundName': result[4],
-                    'schemeCode': result[5],
-                    'amcId': result[6],
-                    'amcName': result[7]
-                }
-                return Response({'code': 1, 'data': data, 'message': 'NAV update data retrieved successfully'})
-            else:
-                return Response({'code': 0, 'message': 'NAV data not found'}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            return Response({'code': 0, 'message': f'Error retrieving NAV update data: {str(e)}'},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    @action(detail=False, methods=['GET'])
-    def funds_by_amc(self, request):
-        amc_id = request.query_params.get('amc_id')
-        if not amc_id:
-            return Response({'error': 'AMC ID is required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            funds = FundModel.objects.filter(fundAmcName_id=amc_id, hideStatus=0).values('id', 'fundName')
-            return Response({'code': 1, 'data': list(funds), 'message': 'Funds retrieved successfully'})
-        except Exception as e:
-            return Response({'code': 0, 'message': f'Error retrieving funds: {str(e)}'},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
 class IssueViewSet(viewsets.ModelViewSet):
     queryset = IssueModel.objects.filter(hideStatus=0)
     serializer_class = IssueModelSerializers
@@ -2996,6 +2809,193 @@ class ClientPowerOfAttorneyViewSet(viewsets.ModelViewSet):
         return Response(response)
 
 
+class NavViewSet(viewsets.ModelViewSet):
+    queryset = NavModel.objects.filter(hideStatus=0).order_by('-createdAt')
+    serializer_class = NavModelSerializers
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 10))
+        search = request.query_params.get('search', '')
+        cursor = request.query_params.get('cursor')
+
+        queryset = self.get_queryset().select_related('navFundName', 'navFundName__fundAmcName')
+
+        if search:
+            queryset = queryset.filter(
+                Q(navFundName__fundAmcName__amcName__icontains=search) |
+                Q(navFundName__fundName__icontains=search) |
+                Q(nav__icontains=search)
+            )
+
+        if cursor:
+            queryset = queryset.filter(id__lt=cursor)
+
+        queryset = queryset.order_by('-id')[:page_size + 1]
+
+        serializer = self.get_serializer(queryset[:page_size], many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'next_cursor': str(queryset[page_size].id) if len(queryset) > page_size else None
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        total_count = self.get_queryset().count()
+        return Response({'total_count': total_count})
+
+    @action(detail=True, methods=['GET'])
+    def list_for_update(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            try:
+                instance = NavModel.objects.get(id=pk)
+                serializer = NavModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except NavModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
+        else:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
+
+    @action(detail=True, methods=['POST'])
+    @transaction.atomic
+    def processing(self, request, pk=None):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        data = request.data
+        amc_id = data.get('navAmcName')
+        fund_id = data.get('navFundName')
+        nav = data.get('nav')
+        nav_date = data.get('navDate')
+
+        try:
+            amc = AmcEntryModel.objects.get(id=amc_id)
+            fund = FundModel.objects.get(id=fund_id)
+
+            # Update fund's AMC if it has changed
+            if fund.fundAmcName_id != amc.id:
+                fund.fundAmcName = amc
+                fund.save()
+
+            # Create or update NAV entry
+            if pk == "0":
+                nav_entry = NavModel.objects.create(
+                    navFundName=fund,
+                    nav=nav,
+                    navDate=nav_date
+                )
+            else:
+                nav_entry = NavModel.objects.get(id=pk)
+                nav_entry.navFundName = fund
+                nav_entry.nav = nav
+                nav_entry.navDate = nav_date
+                nav_entry.save()
+
+            serializer = self.get_serializer(nav_entry)
+            return Response({'code': 1, 'data': serializer.data, 'message': "Done Successfully"})
+
+        except (AmcEntryModel.DoesNotExist, FundModel.DoesNotExist, NavModel.DoesNotExist) as e:
+            return Response({'code': 0, 'message': str(e)}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'code': 0, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['POST'])
+    def fetch(self, request):
+        user = request.user
+        if user.is_authenticated:
+            date = request.data.get('date')
+            start_date = request.data.get('start_date')
+            end_date = request.data.get('end_date')
+
+            try:
+                if date:
+                    call_command('fetch_nav_data', date=date)
+                    message = f"NAV data fetched successfully for {date}"
+                elif start_date and end_date:
+                    call_command('fetch_nav_data', start_date=start_date, end_date=end_date)
+                    message = f"Historic NAV data fetched successfully from {start_date} to {end_date}"
+                else:
+                    return Response({
+                        'code': 0,
+                        'message': "Invalid parameters. Provide either 'date' or both 'start_date' and 'end_date'."
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+                return Response({
+                    'code': 1,
+                    'message': message
+                }, status=status.HTTP_200_OK)
+            except Exception as e:
+                return Response({
+                    'code': 0,
+                    'message': f"Error fetching NAV data: {str(e)}"
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            return Response({
+                'code': 0,
+                'message': "Token is invalid"
+            }, status=status.HTTP_401_UNAUTHORIZED)
+
+    @action(detail=True, methods=['GET'])
+    def deletion(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            NavModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def get_nav_update_data(self, request, pk=None):
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT * FROM get_nav_update_data(%s)", [pk])
+                result = cursor.fetchone()
+
+            if result:
+                data = {
+                    'navId': result[0],
+                    'nav': float(result[1]),
+                    'navDate': result[2].isoformat(),
+                    'fundId': result[3],
+                    'fundName': result[4],
+                    'schemeCode': result[5],
+                    'amcId': result[6],
+                    'amcName': result[7]
+                }
+                return Response({'code': 1, 'data': data, 'message': 'NAV update data retrieved successfully'})
+            else:
+                return Response({'code': 0, 'message': 'NAV data not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'code': 0, 'message': f'Error retrieving NAV update data: {str(e)}'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['GET'])
+    def funds_by_amc(self, request):
+        amc_id = request.query_params.get('amc_id')
+        if not amc_id:
+            return Response({'error': 'AMC ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            funds = FundModel.objects.filter(fundAmcName_id=amc_id, hideStatus=0).values('id', 'fundName')
+            return Response({'code': 1, 'data': list(funds), 'message': 'Funds retrieved successfully'})
+        except Exception as e:
+            return Response({'code': 0, 'message': f'Error retrieving funds: {str(e)}'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class DailyEntryViewSet(viewsets.ModelViewSet):
     queryset = DailyEntryModel.objects.filter(hideStatus=0)
     serializer_class = DailyEntryModelSerializers
@@ -3127,22 +3127,76 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
 
         return Response({'code': 1, 'data': funds, 'message': 'Funds retrieved successfully'})
 
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 10))
+        cursor = request.query_params.get('cursor')
+        search = request.query_params.get('search', '')
+
+        queryset = self.get_queryset().select_related(
+            'dailyEntryClientName',
+            'dailyEntryClientPanNumber',
+            'dailyEntryClientMobileNumber',
+            'dailyEntryFundName',
+            'dailyEntryIssueType'
+        )
+
+        if search:
+            queryset = queryset.filter(
+                Q(dailyEntryClientName__clientName__icontains=search) |
+                Q(dailyEntryFundName__fundName__icontains=search) |
+                Q(dailyEntryIssueType__issueTypeName__icontains=search) |
+                Q(applicationDate__icontains=search)
+            )
+
+        if cursor:
+            queryset = queryset.filter(id__lt=int(cursor))
+
+        queryset = queryset.order_by('-id')[:page_size + 1]
+
+        serializer = self.get_serializer(queryset[:page_size], many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'next_cursor': str(queryset[page_size].id) if len(queryset) > page_size else None
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(dailyEntryClientName__clientName__icontains=search) |
+                Q(dailyEntryFundName__fundName__icontains=search) |
+                Q(dailyEntryIssueType__issueTypeName__icontains=search) |
+                Q(applicationDate__icontains=search)
+            )
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
+
     @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
+    def list_for_update(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            if pk == "0":
-                serializer = DailyEntryModelSerializers(
-                    DailyEntryModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = DailyEntryModelSerializers(
-                    DailyEntryModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+            try:
+                instance = DailyEntryModel.objects.get(id=pk)
+                serializer = DailyEntryModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except DailyEntryModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
         else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):

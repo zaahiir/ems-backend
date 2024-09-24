@@ -503,26 +503,28 @@ class IssueModelSerializers(serializers.ModelSerializer):
 
 
 class DailyEntryModelSerializers(serializers.ModelSerializer):
-    dailyEntryClientName = serializers.PrimaryKeyRelatedField(queryset=ClientModel.objects.all())
-    dailyEntryClientPanNumber = serializers.PrimaryKeyRelatedField(queryset=ClientModel.objects.all())
-    dailyEntryClientMobileNumber = serializers.PrimaryKeyRelatedField(queryset=ClientModel.objects.all())
-    dailyEntryFundName = serializers.PrimaryKeyRelatedField(queryset=FundModel.objects.all())
-    dailyEntryIssueType = serializers.PrimaryKeyRelatedField(queryset=IssueTypeModel.objects.all())
+    dailyEntryClientName = serializers.SerializerMethodField()
+    dailyEntryClientPanNumber = serializers.SerializerMethodField()
+    dailyEntryClientMobileNumber = serializers.SerializerMethodField()
+    dailyEntryFundName = serializers.SerializerMethodField()
+    dailyEntryIssueType = serializers.SerializerMethodField()
 
     class Meta:
         model = DailyEntryModel
         fields = '__all__'
 
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        representation[
-            'dailyEntryClientName'] = instance.dailyEntryClientName.clientName if instance.dailyEntryClientName else None
-        representation[
-            'dailyEntryClientPanNumber'] = instance.dailyEntryClientPanNumber.clientPanNo if instance.dailyEntryClientPanNumber else None
-        representation[
-            'dailyEntryClientMobileNumber'] = instance.dailyEntryClientMobileNumber.clientPhone if instance.dailyEntryClientMobileNumber else None
-        representation[
-            'dailyEntryFundName'] = instance.dailyEntryFundName.fundName if instance.dailyEntryFundName else None
-        representation[
-            'dailyEntryIssueType'] = instance.dailyEntryIssueType.issueTypeName if instance.dailyEntryIssueType else None
-        return representation
+    def get_dailyEntryClientName(self, obj):
+        return obj.dailyEntryClientName.clientName if obj.dailyEntryClientName else None
+
+    def get_dailyEntryClientPanNumber(self, obj):
+        return obj.dailyEntryClientPanNumber.clientPanNo if obj.dailyEntryClientPanNumber else None
+
+    def get_dailyEntryClientMobileNumber(self, obj):
+        return obj.dailyEntryClientMobileNumber.clientPhone if obj.dailyEntryClientMobileNumber else None
+
+    def get_dailyEntryFundName(self, obj):
+        return obj.dailyEntryFundName.fundName if obj.dailyEntryFundName else None
+
+    def get_dailyEntryIssueType(self, obj):
+        return obj.dailyEntryIssueType.issueTypeName if obj.dailyEntryIssueType else None
+
