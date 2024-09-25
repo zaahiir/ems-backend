@@ -200,7 +200,7 @@ class NavModelSerializers(serializers.ModelSerializer):
 
     class Meta:
         model = NavModel
-        fields = ['id', 'nav', 'navDate', 'navFundName', 'amcName']
+        fields = '__all__'
 
     def get_navFundName(self, obj):
         return obj.navFundName.fundName if obj.navFundName else None

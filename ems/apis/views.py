@@ -1050,20 +1050,80 @@ class AumEntryViewSet(viewsets.ModelViewSet):
     serializer_class = AumEntryModelSerializers
     permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 10))
+        page = int(request.query_params.get('page', 1))
+        search = request.query_params.get('search', '')
+
+        queryset = self.get_queryset().select_related(
+            'aumArnNumber',
+            'aumAmcName',
+        )
+
+        if search:
+            queryset = queryset.filter(
+                Q(aumArnNumber__arnNumber__icontains=search) |
+                Q(aumAmcName__amcName__icontains=search) |
+                Q(aumInvoiceNumber__icontains=search) |
+                Q(aumAmount__icontains=search) |
+                Q(aumMonth__icontains=search)
+            )
+
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(aumArnNumber__arnNumber__icontains=search) |
+                Q(aumAmcName__amcName__icontains=search) |
+                Q(aumInvoiceNumber__icontains=search) |
+                Q(aumAmount__icontains=search) |
+                Q(aumMonth__icontains=search)
+            )
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
+
     @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
+    def list_for_update(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            if pk == "0":
-                serializer = AumEntryModelSerializers(AumEntryModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                      many=True)
-            else:
-                serializer = AumEntryModelSerializers(AumEntryModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                                                      many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+            try:
+                instance = AumEntryModel.objects.get(id=pk)
+                serializer = AumEntryModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except AumEntryModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
         else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
@@ -2810,7 +2870,7 @@ class ClientPowerOfAttorneyViewSet(viewsets.ModelViewSet):
 
 
 class NavViewSet(viewsets.ModelViewSet):
-    queryset = NavModel.objects.filter(hideStatus=0).order_by('-createdAt')
+    queryset = NavModel.objects.filter(hideStatus=0).order_by('-id')
     serializer_class = NavModelSerializers
     permission_classes = [IsAuthenticated]
 
@@ -2820,7 +2880,7 @@ class NavViewSet(viewsets.ModelViewSet):
         if not user.is_authenticated:
             return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
 
-        page_size = int(request.query_params.get('page_size', 10))
+        page_size = int(request.query_params.get('page_size', 100))
         search = request.query_params.get('search', '')
         cursor = request.query_params.get('cursor')
 
@@ -2834,24 +2894,40 @@ class NavViewSet(viewsets.ModelViewSet):
             )
 
         if cursor:
-            queryset = queryset.filter(id__lt=cursor)
+            queryset = queryset.filter(id__lte=int(cursor))
 
         queryset = queryset.order_by('-id')[:page_size + 1]
 
-        serializer = self.get_serializer(queryset[:page_size], many=True)
+        results = list(queryset)
+        next_cursor = None
+        if len(results) > page_size:
+            next_cursor = results[-1].id
+            results = results[:-1]
+
+        serializer = self.get_serializer(results, many=True)
 
         data = {
             'code': 1,
             'data': serializer.data,
             'message': "Retrieved Successfully",
-            'next_cursor': str(queryset[page_size].id) if len(queryset) > page_size else None
+            'next_cursor': str(next_cursor) if next_cursor else None
         }
 
         return Response(data)
 
     @action(detail=False, methods=['GET'])
     def total_count(self, request):
-        total_count = self.get_queryset().count()
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(navFundName__fundAmcName__amcName__icontains=search) |
+                Q(navFundName__fundName__icontains=search) |
+                Q(nav__icontains=search)
+            )
+
+        total_count = queryset.count()
         return Response({'total_count': total_count})
 
     @action(detail=True, methods=['GET'])
@@ -3029,36 +3105,44 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                     }
                 )
 
-                fund_house = AmcEntryModel.objects.get(id=data['dailyEntryFundHouse'])
-                fund = FundModel.objects.get(id=data['dailyEntryFundName'])
-                issue_type = IssueTypeModel.objects.get(id=data['dailyEntryIssueType'])
-
                 issueDailyEntry = DailyEntryModel(
                     dailyEntryClientPanNumber=client,
                     dailyEntryClientName=client,
                     dailyEntryClientMobileNumber=client,
-                    dailyEntryFundHouse=fund_house,
-                    dailyEntryFundName=fund,
-                    dailyEntryIssueType=issue_type,
                 )
                 is_new = True
             else:
                 # Update existing instance
                 issueDailyEntry = DailyEntryModel.objects.get(id=pk)
-                client = issueDailyEntry.dailyEntryClientPanNumber
+
+                # Check if client details have changed
+                if (issueDailyEntry.dailyEntryClientPanNumber.clientPanNo != data['dailyEntryClientPanNumber'] or
+                        issueDailyEntry.dailyEntryClientName.clientName != data['dailyEntryClientName'] or
+                        issueDailyEntry.dailyEntryClientMobileNumber.clientPhone != data[
+                            'dailyEntryClientMobileNumber']):
+
+                    # Update or create client
+                    client, _ = ClientModel.objects.update_or_create(
+                        clientPanNo=data['dailyEntryClientPanNumber'],
+                        defaults={
+                            'clientName': data['dailyEntryClientName'],
+                            'clientPhone': data['dailyEntryClientMobileNumber']
+                        }
+                    )
+
+                    # Update DailyEntryModel with new client
+                    issueDailyEntry.dailyEntryClientPanNumber = client
+                    issueDailyEntry.dailyEntryClientName = client
+                    issueDailyEntry.dailyEntryClientMobileNumber = client
+                else:
+                    client = issueDailyEntry.dailyEntryClientPanNumber
+
                 is_new = False
-
-                # Update fund house and fund name
-                issueDailyEntry.dailyEntryFundHouse = AmcEntryModel.objects.get(id=data['dailyEntryFundHouse'])
-                issueDailyEntry.dailyEntryFundName = FundModel.objects.get(id=data['dailyEntryFundName'])
-
-                # Handle issue type update
-                new_issue_type = IssueTypeModel.objects.get(id=data['dailyEntryIssueType'])
-                if issueDailyEntry.dailyEntryIssueType is None or issueDailyEntry.dailyEntryIssueType != new_issue_type:
-                    issueDailyEntry.dailyEntryIssueType = new_issue_type
 
             # Update fields for both create and update operations
             issueDailyEntry.applicationDate = datetime.strptime(data['applicationDate'], '%Y-%m-%d').date()
+            issueDailyEntry.dailyEntryFundHouse = AmcEntryModel.objects.get(id=data['dailyEntryFundHouse'])
+            issueDailyEntry.dailyEntryFundName = FundModel.objects.get(id=data['dailyEntryFundName'])
             issueDailyEntry.dailyEntryClientFolioNumber = data['clientFolioNumber']
             issueDailyEntry.dailyEntryAmount = data['amount']
             issueDailyEntry.dailyEntryClientChequeNumber = data['clientChequeNumber']
@@ -3066,6 +3150,10 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                 'sipDate'] else None
             issueDailyEntry.dailyEntryStaffName = data['staffName']
             issueDailyEntry.dailyEntryTransactionAddDetails = data.get('transactionAddDetail', '')
+
+            new_issue_type = IssueTypeModel.objects.get(id=data['dailyEntryIssueType'])
+            if issueDailyEntry.dailyEntryIssueType is None or issueDailyEntry.dailyEntryIssueType != new_issue_type:
+                issueDailyEntry.dailyEntryIssueType = new_issue_type
 
             issueDailyEntry.save()
 
@@ -3134,7 +3222,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
             return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
 
         page_size = int(request.query_params.get('page_size', 10))
-        cursor = request.query_params.get('cursor')
+        page = int(request.query_params.get('page', 1))
         search = request.query_params.get('search', '')
 
         queryset = self.get_queryset().select_related(
@@ -3153,18 +3241,23 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                 Q(applicationDate__icontains=search)
             )
 
-        if cursor:
-            queryset = queryset.filter(id__lt=int(cursor))
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
 
-        queryset = queryset.order_by('-id')[:page_size + 1]
+        start = (page - 1) * page_size
+        end = start + page_size
 
-        serializer = self.get_serializer(queryset[:page_size], many=True)
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
 
         data = {
             'code': 1,
             'data': serializer.data,
             'message': "Retrieved Successfully",
-            'next_cursor': str(queryset[page_size].id) if len(queryset) > page_size else None
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
         }
 
         return Response(data)
