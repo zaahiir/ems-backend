@@ -1168,22 +1168,78 @@ class CommissionEntryViewSet(viewsets.ModelViewSet):
     serializer_class = CommissionEntryModelSerializers
     permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 10))
+        page = int(request.query_params.get('page', 1))
+        search = request.query_params.get('search', '')
+
+        queryset = self.get_queryset().select_related(
+            'commissionArnNumber',
+            'commissionAmcName',
+        )
+
+        if search:
+            queryset = queryset.filter(
+                Q(commissionArnNumber__arnNumber__icontains=search) |
+                Q(commissionAmcName__amcName__icontains=search) |
+                Q(commissionAmount__icontains=search) |
+                Q(commissionMonth__icontains=search)
+            )
+
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(commissionArnNumber__arnNumber__icontains=search) |
+                Q(commissionAmcName__amcName__icontains=search) |
+                Q(commissionAmount__icontains=search) |
+                Q(commissionMonth__icontains=search)
+            )
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
+
     @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
+    def list_for_update(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            if pk == "0":
-                serializer = CommissionEntryModelSerializers(
-                    CommissionEntryModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = CommissionEntryModelSerializers(
-                    CommissionEntryModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+            try:
+                instance = CommissionEntryModel.objects.get(id=pk)
+                serializer = CommissionEntryModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except CommissionEntryModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
         else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
@@ -1228,22 +1284,75 @@ class AumYoyGrowthEntryViewSet(viewsets.ModelViewSet):
     serializer_class = AumYoyGrowthEntryModelSerializers
     permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 10))
+        page = int(request.query_params.get('page', 1))
+        search = request.query_params.get('search', '')
+
+        queryset = self.get_queryset().select_related(
+            'aumYoyGrowthAmcName',
+        )
+
+        if search:
+            queryset = queryset.filter(
+                Q(aumYoyGrowthAmcName__amcName__icontains=search) |
+                Q(aumYoyGrowthAmount__icontains=search) |
+                Q(aumYoyGrowthDate__icontains=search)
+            )
+
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(aumYoyGrowthAmcName__amcName__icontains=search) |
+                Q(aumYoyGrowthAmount__icontains=search) |
+                Q(aumYoyGrowthDate__icontains=search)
+            )
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
+
     @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
+    def list_for_update(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            if pk == "0":
-                serializer = AumYoyGrowthEntryModelSerializers(
-                    AumYoyGrowthEntryModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = AumYoyGrowthEntryModelSerializers(
-                    AumYoyGrowthEntryModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+            try:
+                instance = AumYoyGrowthEntryModel.objects.get(id=pk)
+                serializer = AumYoyGrowthEntryModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except AumYoyGrowthEntryModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
         else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):

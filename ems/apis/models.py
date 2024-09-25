@@ -138,7 +138,7 @@ class AccountPreferenceModel(models.Model):
 
 class ArnEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
-    arnNumber = models.CharField(max_length=200, null=True, blank=True)
+    arnNumber = models.CharField(max_length=200, null=True, blank=True, unique=True)
     arnName = models.CharField(max_length=200, null=True, blank=True)
     arnMobile = models.CharField(max_length=200, null=True, blank=True)
     arnAddress = models.CharField(max_length=500, null=True, blank=True)
