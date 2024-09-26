@@ -1964,20 +1964,77 @@ class CourierViewSet(viewsets.ModelViewSet):
     serializer_class = CourierModelSerializers
     permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 10))
+        page = int(request.query_params.get('page', 1))
+        search = request.query_params.get('search', '')
+
+        queryset = self.get_queryset().select_related(
+            'courierClientName',
+        )
+
+        if search:
+            queryset = queryset.filter(
+                Q(courierClientName__clientName__icontains=search) |
+                Q(courierClientAddress__icontains=search) |
+                Q(courierMobileNumber__icontains=search) |
+                Q(courierEmail__icontains=search)
+            )
+
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(courierClientName__clientName__icontains=search) |
+                Q(courierClientAddress__icontains=search) |
+                Q(courierMobileNumber__icontains=search) |
+                Q(courierEmail__icontains=search)
+            )
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
+
     @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
+    def list_for_update(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            if pk == "0":
-                serializer = CourierModelSerializers(CourierModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                     many=True)
-            else:
-                serializer = CourierModelSerializers(CourierModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                                                     many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+            try:
+                instance = CourierModel.objects.get(id=pk)
+                serializer = CourierModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except CourierModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
         else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
@@ -2055,20 +2112,76 @@ class FormsViewSet(viewsets.ModelViewSet):
     serializer_class = FormsModelSerializers
     permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 10))
+        page = int(request.query_params.get('page', 1))
+        search = request.query_params.get('search', '')
+
+        queryset = self.get_queryset().select_related(
+            'formsAmcName',
+            'formsType',
+        )
+
+        if search:
+            queryset = queryset.filter(
+                Q(formsAmcName__amcName__icontains=search) |
+                Q(formsType__formTypeName__icontains=search) |
+                Q(formsDescription__icontains=search)
+            )
+
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(formsAmcName__amcName__icontains=search) |
+                Q(formsType__formTypeName__icontains=search) |
+                Q(formsDescription__icontains=search)
+            )
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
+
     @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
+    def list_for_update(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            if pk == "0":
-                queryset = FormsModel.objects.filter(hideStatus=0).order_by('-id')
-            else:
-                queryset = FormsModel.objects.filter(hideStatus=0, id=pk).order_by('-id')
-
-            serializer = FormsModelSerializers(queryset, many=True, context={'request': request})
-            response = {'code': 1, 'data': serializer.data, 'message': "All Retrieved"}
+            try:
+                instance = FormsModel.objects.get(id=pk)
+                serializer = FormsModelSerializers(instance, context={'request': request})
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except FormsModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
         else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
@@ -2138,11 +2251,6 @@ class MarketingViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(queryset, many=True, context={'request': request})
         data = serializer.data
 
-        # Add full URL to marketingFile
-        for item in data:
-            if item['marketingFile']:
-                item['marketingFile'] = request.build_absolute_uri(item['marketingFile'])
-
         response_data = {
             'code': 1,
             'data': data,
@@ -2177,10 +2285,6 @@ class MarketingViewSet(viewsets.ModelViewSet):
                 instance = MarketingModel.objects.get(id=pk)
                 serializer = self.get_serializer(instance, context={'request': request})
                 data = serializer.data
-
-                # Add full URL to marketingFile for single instance
-                if data['marketingFile']:
-                    data['marketingFile'] = request.build_absolute_uri(data['marketingFile'])
 
                 return Response({'code': 1, 'data': data, 'message': "Retrieved Successfully"})
             except MarketingModel.DoesNotExist:
@@ -2454,23 +2558,77 @@ class ClientViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['GET'])
+    def listing(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 10))
+        page = int(request.query_params.get('page', 1))
+        search = request.query_params.get('search', '')
+
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(clientName__icontains=search) |
+                Q(clientEmail__icontains=search) |
+                Q(clientPhone__icontains=search)
+            )
+
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(clientName__icontains=search) |
+                Q(clientEmail__icontains=search) |
+                Q(clientPhone__icontains=search)
+            )
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
+
+    @action(detail=True, methods=['GET'])
+    def list_for_update(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            try:
+                instance = ClientModel.objects.get(id=pk)
+                serializer = ClientModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except ClientModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
+        else:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
+
+    @action(detail=False, methods=['GET'])
     def countries(self, request):
         country_data = [{"code": code, "name": name} for code, name in list(countries)]
         return Response(country_data)
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientModelSerializers(ClientModel.objects.filter(hideStatus=0).order_by('-id'), many=True)
-            else:
-                serializer = ClientModelSerializers(ClientModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                                                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All Retrieved"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return JsonResponse(response, encoder=CustomJSONEncoder)
 
     @action(detail=True, methods=['GET'])
     def listing_client(self, request, pk=None):
