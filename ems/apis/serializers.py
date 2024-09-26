@@ -42,6 +42,12 @@ class GstTypeModelSerializers(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class FileTypeModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = FileTypeModel
+        fields = '__all__'
+
+
 class GenderModelSerializers(serializers.ModelSerializer):
     class Meta:
         model = GenderModel
@@ -292,6 +298,7 @@ class FormsModelSerializers(serializers.ModelSerializer):
 
 class MarketingModelSerializers(serializers.ModelSerializer):
     marketingAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+    marketingType = serializers.PrimaryKeyRelatedField(queryset=FileTypeModel.objects.all())
     marketingFile = serializers.FileField(required=False)
 
     class Meta:
@@ -302,6 +309,8 @@ class MarketingModelSerializers(serializers.ModelSerializer):
         representation = super().to_representation(instance)
         representation[
             'marketingAmcName'] = instance.marketingAmcName.amcName if instance.marketingAmcName else None
+        representation[
+            'marketingType'] = instance.marketingType.fileTypeName if instance.marketingType else None
         if instance.marketingFile:
             representation['marketingFile'] = self.context['request'].build_absolute_uri(instance.marketingFile.url)
         return representation

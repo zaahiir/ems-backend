@@ -77,6 +77,14 @@ class GstTypeModel(models.Model):
     updatedAt = models.DateTimeField(auto_now=True)
 
 
+class FileTypeModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    fileTypeName = models.CharField(max_length=200, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
 class GenderModel(models.Model):
     id = models.AutoField(primary_key=True)
     genderName = models.CharField(max_length=200, null=True, blank=True)
@@ -323,7 +331,8 @@ class MarketingModel(models.Model):
     id = models.AutoField(primary_key=True)
     marketingAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="marketingAmcName",
                                          null=True, blank=True)
-    marketingType = models.CharField(max_length=500, null=True, blank=True)
+    marketingType = models.ForeignKey(FileTypeModel, on_delete=models.CASCADE, related_name="marketingType",
+                                      null=True, blank=True)
     marketingDescription = models.CharField(max_length=2500, null=True, blank=True)
     marketingFile = models.FileField(
         upload_to="marketingFile/",
@@ -687,7 +696,7 @@ class ClientGuardianModel(models.Model):
 class CourierModel(models.Model):
     id = models.AutoField(primary_key=True)
     courierClientName = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="courierClientName",
-                                        null=True, blank=True)
+                                          null=True, blank=True)
     courierClientAddress = models.CharField(max_length=500, null=True, blank=True)
     courierMobileNumber = models.CharField(max_length=200, null=True, blank=True)
     courierEmail = models.EmailField(unique=True)
@@ -754,7 +763,7 @@ class DailyEntryModel(models.Model):
 class IssueModel(models.Model):
     id = models.AutoField(primary_key=True)
     issueDailyEntry = models.OneToOneField(DailyEntryModel, on_delete=models.CASCADE, related_name='issueDailyEntry',
-                                       null=True, blank=True)
+                                           null=True, blank=True)
     issueClientName = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="issueClientName",
                                         null=True, blank=True)
     issueType = models.ForeignKey(IssueTypeModel, on_delete=models.CASCADE, related_name="issueType", null=True,

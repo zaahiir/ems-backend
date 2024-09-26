@@ -465,6 +465,55 @@ class GstTypeViewSet(viewsets.ModelViewSet):
         return Response(response)
 
 
+class FileTypeViewSet(viewsets.ModelViewSet):
+    queryset = FileTypeModel.objects.filter(hideStatus=0)
+    serializer_class = FileTypeModelSerializers
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=True, methods=['GET'])
+    def listing(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            if pk == "0":
+                serializer = FileTypeModelSerializers(FileTypeModel.objects.filter(hideStatus=0).order_by('-id'),
+                                                      many=True)
+            else:
+                serializer = FileTypeModelSerializers(
+                    FileTypeModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
+                    many=True)
+            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+        else:
+            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['POST'])
+    def processing(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            if pk == "0":
+                serializer = FileTypeModelSerializers(data=request.data)
+            else:
+                serializer = FileTypeModelSerializers(instance=FileTypeModel.objects.get(id=pk), data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                response = {'code': 1, 'message': "Done Successfully"}
+            else:
+                response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def deletion(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            FileTypeModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+
 class GenderViewSet(viewsets.ModelViewSet):
     queryset = GenderModel.objects.filter(hideStatus=0)
     serializer_class = GenderModelSerializers
@@ -1495,20 +1544,85 @@ class GstEntryViewSet(viewsets.ModelViewSet):
     serializer_class = GstEntryModelSerializers
     permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 10))
+        page = int(request.query_params.get('page', 1))
+        search = request.query_params.get('search', '')
+
+        queryset = self.get_queryset().select_related(
+            'gstAmcName',
+        )
+
+        if search:
+            queryset = queryset.filter(
+                Q(gstAmcName__amcName__icontains=search) |
+                Q(gstInvoiceDate__icontains=search) |
+                Q(gstInvoiceNumber__icontains=search) |
+                Q(gstTotalValue__icontains=search) |
+                Q(gstTaxableValue__icontains=search) |
+                Q(gstIGst__icontains=search) |
+                Q(gstSGst__icontains=search) |
+                Q(gstCGst__icontains=search)
+            )
+
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(gstAmcName__amcName__icontains=search) |
+                Q(gstInvoiceDate__icontains=search) |
+                Q(gstInvoiceNumber__icontains=search) |
+                Q(gstTotalValue__icontains=search) |
+                Q(gstTaxableValue__icontains=search) |
+                Q(gstIGst__icontains=search) |
+                Q(gstSGst__icontains=search) |
+                Q(gstCGst__icontains=search)
+            )
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
+
     @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
+    def list_for_update(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            if pk == "0":
-                serializer = GstEntryModelSerializers(GstEntryModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                      many=True)
-            else:
-                serializer = GstEntryModelSerializers(GstEntryModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                                                      many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+            try:
+                instance = GstEntryModel.objects.get(id=pk)
+                serializer = GstEntryModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except GstEntryModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
         else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
@@ -1543,40 +1657,166 @@ class IssueViewSet(viewsets.ModelViewSet):
     serializer_class = IssueModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def calculate_resolution_date(self, start_date, estimated_days):
+        current_date = start_date
+        working_days = 0
+        while working_days < estimated_days:
+            current_date += timedelta(days=1)
+            if current_date.weekday() < 5:  # Monday = 0, Friday = 4
+                working_days += 1
+        return current_date
+
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 10))
+        page = int(request.query_params.get('page', 1))
+        search = request.query_params.get('search', '')
+
+        queryset = self.get_queryset().select_related(
+            'issueType',
+            'issueClientName',
+        )
+
+        if search:
+            queryset = queryset.filter(
+                Q(issueType__issueTypeName__icontains=search) |
+                Q(issueClientName__clientName__icontains=search) |
+                Q(issueDate__icontains=search) |
+                Q(issueResolutionDate__icontains=search) |
+                Q(issueDescription__icontains=search)
+            )
+
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(issueType__issueTypeName__icontains=search) |
+                Q(issueClientName__clientName__icontains=search) |
+                Q(issueDate__icontains=search) |
+                Q(issueResolutionDate__icontains=search) |
+                Q(issueDescription__icontains=search)
+            )
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
+
     @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
+    def list_for_update(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            if pk == "0":
-                queryset = IssueModel.objects.filter(hideStatus=0).order_by('-id')
-            else:
-                queryset = IssueModel.objects.filter(hideStatus=0, id=pk).order_by('-id')
-
-            serializer = IssueModelSerializers(queryset, many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All Retrieved"}
+            try:
+                instance = IssueModel.objects.get(id=pk)
+                serializer = IssueModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except IssueModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
         else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
+    @transaction.atomic
     def processing(self, request, pk=None):
         user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = IssueModelSerializers(data=request.data)
-            else:
-                instance = IssueModel.objects.get(id=pk)
-                serializer = IssueModelSerializers(instance=instance, data=request.data, partial=True)
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': 'Token is invalid'})
 
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
-                return Response(response, status=status.HTTP_400_BAD_REQUEST)
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
+        data = request.data
+        try:
+            client = ClientModel.objects.get(id=data['issueClientName'])
+            issue_type = IssueTypeModel.objects.get(id=data['issueType'])
+
+            issue_date = datetime.strptime(data['issueDate'], '%Y-%m-%d').date()
+
+            if pk == '0':  # Create new issue
+                issue_resolution_date = self.calculate_resolution_date(
+                    start_date=issue_date,
+                    estimated_days=issue_type.estimatedIssueDay
+                )
+
+                # Create IssueModel
+                issue = IssueModel.objects.create(
+                    issueClientName=client,
+                    issueType=issue_type,
+                    issueDate=issue_date,
+                    issueResolutionDate=issue_resolution_date,
+                    issueDescription=data['issueDescription'],
+                    hideStatus=0
+                )
+
+                # Create associated DailyEntryModel
+                daily_entry = DailyEntryModel.objects.create(
+                    dailyEntryClientPanNumber=client,
+                    dailyEntryClientName=client,
+                    dailyEntryClientMobileNumber=client,
+                    dailyEntryIssueType=issue_type,
+                    applicationDate=issue_date
+                )
+
+                # Link DailyEntryModel to IssueModel
+                issue.issueDailyEntry = daily_entry
+                issue.save()
+
+                message = 'Issue and associated daily entry created successfully'
+            else:  # Update existing issue
+                issue = IssueModel.objects.get(id=pk)
+                issue_resolution_date = datetime.strptime(data['issueResolutionDate'], '%Y-%m-%d').date()
+
+                # Update IssueModel
+                issue.issueClientName = client
+                issue.issueType = issue_type
+                issue.issueDate = issue_date
+                issue.issueResolutionDate = issue_resolution_date
+                issue.issueDescription = data['issueDescription']
+                issue.save()
+
+                # Update associated DailyEntryModel
+                if issue.issueDailyEntry:
+                    daily_entry = issue.issueDailyEntry
+                    daily_entry.dailyEntryIssueType = issue_type
+                    daily_entry.save()
+
+                message = 'Issue and associated daily entry updated successfully'
+
+            return Response({
+                'code': 1,
+                'message': message,
+                'issue_id': issue.id,
+                'issue_resolution_date': issue_resolution_date.strftime('%Y-%m-%d')
+            })
+        except Exception as e:
+            transaction.set_rollback(True)
+            return Response({
+                'code': 0,
+                'message': f'Failed to process issue and daily entry: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['GET'])
     @transaction.atomic
@@ -1617,21 +1857,79 @@ class StatementViewSet(viewsets.ModelViewSet):
     serializer_class = StatementModelSerializers
     permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 10))
+        page = int(request.query_params.get('page', 1))
+        search = request.query_params.get('search', '')
+
+        queryset = self.get_queryset().select_related(
+            'statementAmcName',
+        )
+
+        if search:
+            queryset = queryset.filter(
+                Q(statementAmcName__amcName__icontains=search) |
+                Q(statementDate__icontains=search) |
+                Q(statementInvestorName__icontains=search) |
+                Q(statementInvestorPanNo__icontains=search) |
+                Q(statementFundName__icontains=search)
+            )
+
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(statementAmcName__amcName__icontains=search) |
+                Q(statementDate__icontains=search) |
+                Q(statementInvestorName__icontains=search) |
+                Q(statementInvestorPanNo__icontains=search) |
+                Q(statementFundName__icontains=search)
+            )
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
+
     @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
+    def list_for_update(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            if pk == "0":
-                serializer = StatementModelSerializers(StatementModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                       many=True)
-            else:
-                serializer = StatementModelSerializers(
-                    StatementModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+            try:
+                instance = StatementModel.objects.get(id=pk)
+                serializer = StatementModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except StatementModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
         else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
@@ -1807,27 +2105,88 @@ class MarketingViewSet(viewsets.ModelViewSet):
     serializer_class = MarketingModelSerializers
     permission_classes = [IsAuthenticated]
 
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
         user = request.user
-        if user.is_authenticated:  # Replace with proper token validation
-            if pk == "0":
-                queryset = self.queryset.order_by('-id')
-            else:
-                queryset = self.queryset.filter(id=pk).order_by('-id')
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
 
-            serializer = self.serializer_class(queryset, many=True, context={'request': request})
-            data = serializer.data
+        page_size = int(request.query_params.get('page_size', 10))
+        page = int(request.query_params.get('page', 1))
+        search = request.query_params.get('search', '')
 
-            # Add full URL to marketingFile
-            for item in data:
-                if item['marketingFile']:
-                    item['marketingFile'] = request.build_absolute_uri(item['marketingFile'])
+        queryset = self.get_queryset().select_related(
+            'marketingAmcName',
+            'marketingType',
+        )
 
-            response = {'code': 1, 'data': data, 'message': "All Retrieved"}
+        if search:
+            queryset = queryset.filter(
+                Q(marketingAmcName__amcName__icontains=search) |
+                Q(marketingType__fileTypeName__icontains=search) |
+                Q(marketingDescription__icontains=search)
+            )
+
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True, context={'request': request})
+        data = serializer.data
+
+        # Add full URL to marketingFile
+        for item in data:
+            if item['marketingFile']:
+                item['marketingFile'] = request.build_absolute_uri(item['marketingFile'])
+
+        response_data = {
+            'code': 1,
+            'data': data,
+            'message': "Retrieved Successfully",
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+
+        return Response(response_data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(marketingAmcName__amcName__icontains=search) |
+                Q(marketingType__fileTypeName__icontains=search) |
+                Q(marketingDescription__icontains=search)
+            )
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
+
+    @action(detail=True, methods=['GET'])
+    def list_for_update(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            try:
+                instance = MarketingModel.objects.get(id=pk)
+                serializer = self.get_serializer(instance, context={'request': request})
+                data = serializer.data
+
+                # Add full URL to marketingFile for single instance
+                if data['marketingFile']:
+                    data['marketingFile'] = request.build_absolute_uri(data['marketingFile'])
+
+                return Response({'code': 1, 'data': data, 'message': "Retrieved Successfully"})
+            except MarketingModel.DoesNotExist:
+                return Response({'code': 0, 'message': "Marketing entry not found"}, status=404)
         else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
@@ -1900,20 +2259,75 @@ class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskModelSerializers
     permission_classes = [IsAuthenticated]
 
+    @action(detail=False, methods=['GET'])
+    def listing(self, request):
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 10))
+        page = int(request.query_params.get('page', 1))
+        search = request.query_params.get('search', '')
+
+        queryset = self.get_queryset().select_related(
+            'taskClient',
+        )
+
+        if search:
+            queryset = queryset.filter(
+                Q(taskClient__clientName__icontains=search) |
+                Q(taskTitle__icontains=search) |
+                Q(taskDate__icontains=search)
+            )
+
+        total_count = queryset.count()
+        total_pages = (total_count + page_size - 1) // page_size
+
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        data = {
+            'code': 1,
+            'data': serializer.data,
+            'message': "Retrieved Successfully",
+            'total_count': total_count,
+            'total_pages': total_pages,
+            'current_page': page
+        }
+
+        return Response(data)
+
+    @action(detail=False, methods=['GET'])
+    def total_count(self, request):
+        search = request.query_params.get('search', '')
+        queryset = self.get_queryset()
+
+        if search:
+            queryset = queryset.filter(
+                Q(taskClient__clientName__icontains=search) |
+                Q(taskTitle__icontains=search) |
+                Q(taskDate__icontains=search)
+            )
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
+
     @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
+    def list_for_update(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            if pk == "0":
-                serializer = TaskModelSerializers(TaskModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                  many=True)
-            else:
-                serializer = TaskModelSerializers(TaskModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                                                  many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+            try:
+                instance = TaskModel.objects.get(id=pk)
+                serializer = TaskModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except TaskModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
         else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
+            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
