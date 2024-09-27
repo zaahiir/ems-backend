@@ -12,6 +12,12 @@ class UserTypeModelSerializers(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class CountryModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = CountryModel
+        fields = '__all__'
+
+
 class StateModelSerializers(serializers.ModelSerializer):
     class Meta:
         model = StateModel

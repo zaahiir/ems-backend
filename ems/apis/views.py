@@ -222,6 +222,54 @@ class UserTypeViewSet(viewsets.ModelViewSet):
         return Response(response)
 
 
+class CountryViewSet(viewsets.ModelViewSet):
+    queryset = CountryModel.objects.filter(hideStatus=0)
+    serializer_class = CountryModelSerializers
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=True, methods=['GET'])
+    def listing(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            if pk == "0":
+                Country = CountryModel.objects.filter(hideStatus=0).order_by('-id')
+            else:
+                Country = CountryModel.objects.filter(hideStatus=0, id=pk).order_by('-id')
+            serializer = CountryModelSerializers(Country, many=True)
+            response = {'code': 1, 'data': serializer.data, 'message': "All Retried"}
+        else:
+            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['POST'])
+    def processing(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            if pk == "0":
+                serializer = CountryModelSerializers(data=request.data)
+            else:
+                instance = CountryModel.objects.get(id=pk)
+                serializer = CountryModelSerializers(instance=instance, data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                response = {'code': 1, 'message': "Done Successfully"}
+            else:
+                response = {'code': 0, 'message': "Unable to Process Request"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def deletion(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            CountryModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+
 class StateViewSet(viewsets.ModelViewSet):
     queryset = StateModel.objects.filter(hideStatus=0)
     serializer_class = StateModelSerializers
