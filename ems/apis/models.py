@@ -35,9 +35,29 @@ class UserTypeModel(models.Model):
     updatedAt = models.DateTimeField(auto_now=True)
 
 
+class CountryModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    countryName = models.CharField(max_length=200, null=True, blank=True)
+    countryCode = models.CharField(max_length=55, null=True, blank=True)
+    dailCode = models.CharField(max_length=10, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
 class StateModel(models.Model):
     id = models.AutoField(primary_key=True)
     stateName = models.CharField(max_length=200, null=True, blank=True)
+    stateCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="stateCountry", null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
+class PincodeModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    pinCode = models.CharField(max_length=6, null=True, blank=True)
+    pinCodeState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="pinCodeState", null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
