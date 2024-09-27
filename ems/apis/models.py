@@ -57,6 +57,7 @@ class StateModel(models.Model):
 class PincodeModel(models.Model):
     id = models.AutoField(primary_key=True)
     pinCode = models.CharField(max_length=6, null=True, blank=True)
+    pinCodeCity = models.CharField(max_length=250, null=True, blank=True)
     pinCodeState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="pinCodeState", null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
