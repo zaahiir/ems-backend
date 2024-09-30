@@ -920,7 +920,16 @@ class ArnEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['GET'])
     def countries(self, request):
-        country_data = [{"code": code, "name": name} for code, name in list(countries)]
+        countries = CountryModel.objects.filter(hideStatus=0).values('id', 'countryCode', 'countryName', 'dailCode')
+        country_data = [
+            {
+                "id": country['id'],
+                "code": country['countryCode'],
+                "name": country['countryName'],
+                "dial_code": country['dailCode']
+            }
+            for country in countries
+        ]
         return Response(country_data)
 
     @action(detail=True, methods=['GET'])

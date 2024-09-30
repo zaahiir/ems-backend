@@ -48,17 +48,8 @@ class CountryModel(models.Model):
 class StateModel(models.Model):
     id = models.AutoField(primary_key=True)
     stateName = models.CharField(max_length=200, null=True, blank=True)
-    stateCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="stateCountry", null=True, blank=True)
-    hideStatus = models.IntegerField(default=0)
-    createdAt = models.DateTimeField(auto_now_add=True)
-    updatedAt = models.DateTimeField(auto_now=True)
-
-
-class PincodeModel(models.Model):
-    id = models.AutoField(primary_key=True)
-    pinCode = models.CharField(max_length=6, null=True, blank=True)
-    pinCodeCity = models.CharField(max_length=250, null=True, blank=True)
-    pinCodeState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="pinCodeState", null=True, blank=True)
+    stateCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="stateCountry", null=True,
+                                     blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -169,10 +160,11 @@ class ArnEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
     arnNumber = models.CharField(max_length=200, null=True, blank=True, unique=True)
     arnName = models.CharField(max_length=200, null=True, blank=True)
-    arnMobile = models.CharField(max_length=200, null=True, blank=True)
+    arnCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="arnCountryCode", null=True, blank=True)
+    arnMobile = models.CharField(max_length=55, null=True, blank=True)
     arnAddress = models.CharField(max_length=500, null=True, blank=True)
     arnState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="arnState", null=True, blank=True)
-    arnCountry = CountryField(blank_label='(select country)', null=True, blank=True)
+    arnCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="arnCountry", null=True, blank=True)
     arnPinCode = models.IntegerField(null=True, blank=True)
     arnEmail = models.EmailField(unique=True)
     arnEuin = models.CharField(max_length=200, null=True, blank=True)
@@ -373,7 +365,8 @@ class EmployeeModel(models.Model):
     id = models.AutoField(primary_key=True)
     employeeName = models.CharField(max_length=500, null=True, blank=True)
     employeeEmail = models.EmailField(unique=True)
-    employeePhone = models.CharField(max_length=500, null=True, blank=True)
+    employeeCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="employeeCountryCode", null=True, blank=True)
+    employeePhone = models.CharField(max_length=55, null=True, blank=True)
     employeePassword = models.CharField(max_length=500, null=True, blank=True)
     employeeAddress = models.CharField(max_length=2500, null=True, blank=True)
     employeeOtherDetail = models.CharField(max_length=2500, null=True, blank=True)
@@ -719,7 +712,8 @@ class CourierModel(models.Model):
     courierClientName = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="courierClientName",
                                           null=True, blank=True)
     courierClientAddress = models.CharField(max_length=500, null=True, blank=True)
-    courierMobileNumber = models.CharField(max_length=200, null=True, blank=True)
+    courierCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="courierCountryCode", null=True, blank=True)
+    courierMobileNumber = models.CharField(max_length=55, null=True, blank=True)
     courierEmail = models.EmailField(unique=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
@@ -764,6 +758,9 @@ class DailyEntryModel(models.Model):
     dailyEntryClientMobileNumber = models.ForeignKey(ClientModel, on_delete=models.CASCADE,
                                                      related_name="dailyEntryClientMobileNumber",
                                                      null=True, blank=True)
+    dailyEntryClientCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
+                                                    related_name="dailyEntryClientCountryCode",
+                                                    null=True, blank=True)
     dailyEntryFundHouse = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="dailyEntryFundHouse",
                                             null=True, blank=True)
     dailyEntryFundName = models.ForeignKey(FundModel, on_delete=models.CASCADE, related_name="dailyEntryFundName",
