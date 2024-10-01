@@ -351,10 +351,16 @@ class TaskModelSerializers(serializers.ModelSerializer):
 class EmployeeModelSerializers(serializers.ModelSerializer):
     employeeUserType = serializers.PrimaryKeyRelatedField(queryset=UserTypeModel.objects.all())
     employeePhotoUrl = serializers.SerializerMethodField()
+    full_mobile = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeModel
         fields = '__all__'
+
+    def get_full_mobile(self, obj):
+        if obj.employeeCountryCode and obj.employeePhone:
+            return f"{obj.employeeCountryCode.dailCode} {obj.employeePhone}"
+        return obj.employeePhone
 
     def get_employeePhotoUrl(self, obj):
         request = self.context.get('request')
