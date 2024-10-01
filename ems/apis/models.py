@@ -396,7 +396,11 @@ class ClientModel(models.Model):
     id = models.AutoField(primary_key=True)
     clientName = models.CharField(max_length=500, null=True, blank=True)
     clientEmail = models.EmailField()
+    clientPhoneCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
+                                               related_name="clientPhoneCountryCode", null=True, blank=True)
     clientPhone = models.CharField(max_length=500, null=True, blank=True)
+    clientAlternatePhoneCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
+                                                        related_name="clientAlternatePhoneCountryCode", null=True, blank=True)
     clientAlternatePhone = models.CharField(max_length=500, null=True, blank=True)
     clientPanNo = models.CharField(max_length=500, null=True, blank=True)
     clientKycNo = models.CharField(max_length=500, null=True, blank=True, unique=True)
@@ -415,7 +419,7 @@ class ClientModel(models.Model):
     clientMaritalStatus = models.ForeignKey(MaritalStatusModel, on_delete=models.CASCADE,
                                             related_name="clientMaritalStatus", null=True, blank=True)
     clientAnniversaryDate = models.DateField(null=True, blank=True)
-    clientCountryOfBirth = CountryField(blank_label='(select country)', null=True, blank=True)
+    clientCountryOfBirth = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="clientCountryOfBirth", null=True, blank=True)
     clientPlaceOfBirth = models.CharField(max_length=500, null=True, blank=True)
     clientCitizenship = models.CharField(max_length=500, null=True, blank=True)
     clientResidentialStatus = models.CharField(max_length=500, null=True, blank=True)
@@ -466,7 +470,10 @@ class ClientPresentAddressModel(models.Model):
     clientPresentState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="clientPresentState",
                                            null=True, blank=True)
     clientPresentPincode = models.IntegerField(null=True, blank=True)
-    clientPresentCountry = CountryField(blank_label='(select country)', null=True, blank=True)
+    clientPresentCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
+                                             related_name="clientPresentCountry", null=True, blank=True)
+    clientPresentCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
+                                                 related_name="clientPresentCountryCode", null=True, blank=True)
     clientPresentMobile = models.CharField(max_length=500, null=True, blank=True)
     clientPresentLandline = models.CharField(max_length=500, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
@@ -485,7 +492,10 @@ class ClientPermanentAddressModel(models.Model):
     clientPermanentState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="clientPermanentState",
                                              null=True, blank=True)
     clientPermanentPincode = models.IntegerField(null=True, blank=True)
-    clientPermanentCountry = CountryField(blank_label='(select country)', null=True, blank=True)
+    clientPermanentCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
+                                               related_name="clientPermanentCountry", null=True, blank=True)
+    clientPermanentCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
+                                                   related_name="clientPermanentCountryCode", null=True, blank=True)
     clientPermanentMobile = models.CharField(max_length=500, null=True, blank=True)
     clientPermanentLandline = models.CharField(max_length=500, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
@@ -500,11 +510,13 @@ class ClientOfficeAddressModel(models.Model):
     clientOfficeAddress = models.CharField(max_length=500, null=True, blank=True)
     clientOfficeLandline = models.CharField(max_length=500, null=True, blank=True)
     clientOfficeCity = models.CharField(max_length=500, null=True, blank=True)
+    clientOfficeCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
+                                                related_name="clientOfficeCountryCode", null=True, blank=True)
     clientOfficeMobile = models.CharField(max_length=500, null=True, blank=True)
     clientOfficeState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="clientOfficeState",
                                           null=True, blank=True)
     clientOfficePincode = models.IntegerField(null=True, blank=True)
-    clientOfficeCountry = CountryField(blank_label='(select country)', null=True, blank=True)
+    clientOfficeCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="clientOfficeCountry", null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -517,11 +529,14 @@ class ClientOverseasAddressModel(models.Model):
     clientOverseasAddress = models.CharField(max_length=500, null=True, blank=True)
     clientOverseasLandline = models.CharField(max_length=500, null=True, blank=True)
     clientOverseasCity = models.CharField(max_length=500, null=True, blank=True)
+    clientOverseasCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
+                                                  related_name="clientOverseasCountryCode", null=True, blank=True)
     clientOverseasMobile = models.CharField(max_length=500, null=True, blank=True)
     clientOverseasState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="clientOverseasState",
                                             null=True, blank=True)
     clientOverseasPincode = models.IntegerField(null=True, blank=True)
-    clientOverseasCountry = CountryField(blank_label='(select country)', null=True, blank=True)
+    clientOverseasCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
+                                              related_name="clientOverseasCountry", null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -677,7 +692,7 @@ class ClientTaxModel(models.Model):
                                     blank=True)
     clientTaxIdDetail = models.CharField(max_length=500, null=True, blank=True)
     clientTaxIdNo = models.CharField(max_length=500, null=True, blank=True)
-    clientTaxCountry = CountryField(blank_label='(select country)', null=True, blank=True)
+    clientTaxCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="clientTaxCountry", null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
