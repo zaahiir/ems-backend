@@ -3896,16 +3896,27 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
             return Response({'code': 0, 'message': 'Token is invalid'})
 
         data = request.data
+        logger.debug(f"Received data: {data}")
+
         try:
             # Fetch CountryModel instance using dailCode
+            client_phone_country_code = data.get('clientPhoneCountryCode')
+            logger.debug(f"Attempting to fetch country with dial code: {client_phone_country_code}")
+
+            if not client_phone_country_code:
+                return Response({'code': 0, 'message': "clientPhoneCountryCode is required"})
+
             try:
-                country = CountryModel.objects.get(dailCode=data['clientPhoneCountryCode'])
+                country = CountryModel.objects.get(dailCode=client_phone_country_code)
+                logger.debug(f"Found country: {country}")
             except CountryModel.DoesNotExist:
-                return Response({'code': 0, 'message': f"Country with dial code {data['clientPhoneCountryCode']} not found"})
+                logger.error(f"Country with dial code {client_phone_country_code} not found")
+                return Response({'code': 0, 'message': f"Country with dial code {client_phone_country_code} not found"})
 
             if pk == "0":
+                logger.debug("Creating new instances")
                 # Create new instances
-                client, _ = ClientModel.objects.get_or_create(
+                client, created = ClientModel.objects.get_or_create(
                     clientPanNo=data['dailyEntryClientPanNumber'],
                     defaults={
                         'clientName': data['dailyEntryClientName'],
@@ -3913,6 +3924,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                         'clientPhoneCountryCode': country
                     }
                 )
+                logger.debug(f"Client {'created' if created else 'retrieved'}: {client}")
 
                 issueDailyEntry = DailyEntryModel(
                     dailyEntryClientPanNumber=client,
@@ -3922,6 +3934,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                 )
                 is_new = True
             else:
+                logger.debug(f"Updating existing instance with pk: {pk}")
                 # Update existing instance
                 issueDailyEntry = DailyEntryModel.objects.get(id=pk)
 
@@ -3931,8 +3944,9 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                         issueDailyEntry.dailyEntryClientMobileNumber.clientPhone != data['clientMobileNumber'] or
                         issueDailyEntry.dailyEntryClientCountryCode != country):
 
+                    logger.debug("Client details have changed, updating")
                     # Update or create client
-                    client, _ = ClientModel.objects.update_or_create(
+                    client, created = ClientModel.objects.update_or_create(
                         clientPanNo=data['dailyEntryClientPanNumber'],
                         defaults={
                             'clientName': data['dailyEntryClientName'],
@@ -3940,6 +3954,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                             'clientPhoneCountryCode': country
                         }
                     )
+                    logger.debug(f"Client {'created' if created else 'updated'}: {client}")
 
                     # Update DailyEntryModel with new client
                     issueDailyEntry.dailyEntryClientPanNumber = client
@@ -3947,18 +3962,21 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                     issueDailyEntry.dailyEntryClientMobileNumber = client
                     issueDailyEntry.dailyEntryClientCountryCode = country
                 else:
+                    logger.debug("Client details unchanged")
                     client = issueDailyEntry.dailyEntryClientPanNumber
 
                 is_new = False
 
             # Update fields for both create and update operations
+            logger.debug("Updating DailyEntryModel fields")
             issueDailyEntry.applicationDate = datetime.strptime(data['applicationDate'], '%Y-%m-%d').date()
             issueDailyEntry.dailyEntryFundHouse = AmcEntryModel.objects.get(id=data['dailyEntryFundHouse'])
             issueDailyEntry.dailyEntryFundName = FundModel.objects.get(id=data['dailyEntryFundName'])
             issueDailyEntry.dailyEntryClientFolioNumber = data['clientFolioNumber']
             issueDailyEntry.dailyEntryAmount = data['amount']
             issueDailyEntry.dailyEntryClientChequeNumber = data['clientChequeNumber']
-            issueDailyEntry.dailyEntrySipDate = datetime.strptime(data['sipDate'], '%Y-%m-%d').date() if data['sipDate'] else None
+            issueDailyEntry.dailyEntrySipDate = datetime.strptime(data['sipDate'], '%Y-%m-%d').date() if data[
+                'sipDate'] else None
             issueDailyEntry.dailyEntryStaffName = data['staffName']
             issueDailyEntry.dailyEntryTransactionAddDetails = data.get('transactionAddDetail', '')
 
@@ -3967,12 +3985,14 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                 issueDailyEntry.dailyEntryIssueType = new_issue_type
 
             issueDailyEntry.save()
+            logger.debug(f"DailyEntryModel saved: {issueDailyEntry}")
 
             # Calculate issue resolution date considering only working days
             issue_resolution_date = self.calculate_working_days(
                 issueDailyEntry.applicationDate,
                 issueDailyEntry.dailyEntryIssueType.estimatedIssueDay
             )
+            logger.debug(f"Calculated issue resolution date: {issue_resolution_date}")
 
             # Handle IssueModel
             issue, created = IssueModel.objects.update_or_create(
@@ -3986,6 +4006,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                     'hideStatus': 0  # Ensure the issue is not hidden
                 }
             )
+            logger.debug(f"IssueModel {'created' if created else 'updated'}: {issue}")
 
             return Response({
                 'code': 1,
@@ -3994,6 +4015,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                 'issue_id': issue.id
             })
         except Exception as e:
+            logger.exception("An error occurred while processing daily entry and issue")
             transaction.set_rollback(True)
             return Response({'code': 0, 'message': f'Failed to process daily entry and issue: {str(e)}'})
 
