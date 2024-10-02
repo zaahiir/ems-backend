@@ -3897,13 +3897,20 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
 
         data = request.data
         try:
+            # Fetch CountryModel instance using dailCode
+            try:
+                country = CountryModel.objects.get(dailCode=data['clientPhoneCountryCode'])
+            except CountryModel.DoesNotExist:
+                return Response({'code': 0, 'message': f"Country with dial code {data['clientPhoneCountryCode']} not found"})
+
             if pk == "0":
                 # Create new instances
                 client, _ = ClientModel.objects.get_or_create(
                     clientPanNo=data['dailyEntryClientPanNumber'],
                     defaults={
                         'clientName': data['dailyEntryClientName'],
-                        'clientPhone': data['dailyEntryClientMobileNumber']
+                        'clientPhone': data['clientMobileNumber'],
+                        'clientPhoneCountryCode': country
                     }
                 )
 
@@ -3911,6 +3918,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                     dailyEntryClientPanNumber=client,
                     dailyEntryClientName=client,
                     dailyEntryClientMobileNumber=client,
+                    dailyEntryClientCountryCode=country
                 )
                 is_new = True
             else:
@@ -3920,15 +3928,16 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                 # Check if client details have changed
                 if (issueDailyEntry.dailyEntryClientPanNumber.clientPanNo != data['dailyEntryClientPanNumber'] or
                         issueDailyEntry.dailyEntryClientName.clientName != data['dailyEntryClientName'] or
-                        issueDailyEntry.dailyEntryClientMobileNumber.clientPhone != data[
-                            'dailyEntryClientMobileNumber']):
+                        issueDailyEntry.dailyEntryClientMobileNumber.clientPhone != data['clientMobileNumber'] or
+                        issueDailyEntry.dailyEntryClientCountryCode != country):
 
                     # Update or create client
                     client, _ = ClientModel.objects.update_or_create(
                         clientPanNo=data['dailyEntryClientPanNumber'],
                         defaults={
                             'clientName': data['dailyEntryClientName'],
-                            'clientPhone': data['dailyEntryClientMobileNumber']
+                            'clientPhone': data['clientMobileNumber'],
+                            'clientPhoneCountryCode': country
                         }
                     )
 
@@ -3936,6 +3945,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                     issueDailyEntry.dailyEntryClientPanNumber = client
                     issueDailyEntry.dailyEntryClientName = client
                     issueDailyEntry.dailyEntryClientMobileNumber = client
+                    issueDailyEntry.dailyEntryClientCountryCode = country
                 else:
                     client = issueDailyEntry.dailyEntryClientPanNumber
 
@@ -3948,8 +3958,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
             issueDailyEntry.dailyEntryClientFolioNumber = data['clientFolioNumber']
             issueDailyEntry.dailyEntryAmount = data['amount']
             issueDailyEntry.dailyEntryClientChequeNumber = data['clientChequeNumber']
-            issueDailyEntry.dailyEntrySipDate = datetime.strptime(data['sipDate'], '%Y-%m-%d').date() if data[
-                'sipDate'] else None
+            issueDailyEntry.dailyEntrySipDate = datetime.strptime(data['sipDate'], '%Y-%m-%d').date() if data['sipDate'] else None
             issueDailyEntry.dailyEntryStaffName = data['staffName']
             issueDailyEntry.dailyEntryTransactionAddDetails = data.get('transactionAddDetail', '')
 
@@ -4001,7 +4010,25 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
 
         if client:
             client_data = dict(zip(columns, client))
-            return Response({'code': 1, 'data': client_data, 'message': 'Client details retrieved successfully'})
+
+            # Prepare the response data
+            response_data = {
+                'client_name': client_data['client_name'],
+                'client_pan_no': client_data['client_pan_no'],
+                'client_phone': client_data['client_phone'],
+                'client_phone_dial_code': client_data['client_phone_dial_code'],
+            }
+
+            # Add alternate phone if it exists
+            if client_data['client_alternate_phone']:
+                response_data['client_alternate_phone'] = client_data['client_alternate_phone']
+                response_data['client_alternate_phone_dial_code'] = client_data['client_alternate_phone_dial_code']
+
+            return Response({
+                'code': 1,
+                'data': response_data,
+                'message': 'Client details retrieved successfully'
+            })
         else:
             return Response({'code': 0, 'message': 'Client not found'})
 
