@@ -376,9 +376,16 @@ class EmployeeModelSerializers(serializers.ModelSerializer):
 
 
 class ClientModelSerializers(serializers.ModelSerializer):
+    full_mobile = serializers.SerializerMethodField()
+
     class Meta:
         model = ClientModel
         fields = '__all__'
+
+    def get_full_mobile(self, obj):
+        if obj.clientPhoneCountryCode and obj.clientPhone:
+            return f"{obj.clientPhoneCountryCode.dailCode} {obj.clientPhone}"
+        return obj.clientPhone
 
 
 class ClientFamilyDetailModelSerializers(serializers.ModelSerializer):
@@ -561,4 +568,3 @@ class DailyEntryModelSerializers(serializers.ModelSerializer):
 
     def get_dailyEntryIssueType(self, obj):
         return obj.dailyEntryIssueType.issueTypeName if obj.dailyEntryIssueType else None
-
