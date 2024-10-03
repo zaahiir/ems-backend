@@ -179,7 +179,8 @@ class AmcEntryModel(models.Model):
     amcName = models.CharField(unique=True, max_length=200, null=True, blank=True)
     amcAddress = models.CharField(max_length=500, null=True, blank=True)
     amcState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="amcState", null=True, blank=True)
-    amcCountry = CountryField(blank_label='(select country)', null=True, blank=True)
+    amcCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="amcCountry", null=True,
+                                   blank=True)
     amcPinCode = models.IntegerField(null=True, blank=True)
     amcGstNo = models.CharField(max_length=50, null=True, blank=True)
     amcGstType = models.ForeignKey(GstTypeModel, on_delete=models.CASCADE, related_name="amcGstType", null=True,

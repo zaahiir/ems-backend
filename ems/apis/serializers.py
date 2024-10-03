@@ -549,6 +549,9 @@ class DailyEntryModelSerializers(serializers.ModelSerializer):
     dailyEntryClientMobileNumber = serializers.SerializerMethodField()
     dailyEntryFundName = serializers.SerializerMethodField()
     dailyEntryIssueType = serializers.SerializerMethodField()
+    dailyEntryClientCountryCode = serializers.SerializerMethodField()
+    # dailyEntryClientCountryName = serializers.SerializerMethodField()
+    # dailyEntryClientCountryDialCode = serializers.SerializerMethodField()
 
     class Meta:
         model = DailyEntryModel
@@ -568,3 +571,18 @@ class DailyEntryModelSerializers(serializers.ModelSerializer):
 
     def get_dailyEntryIssueType(self, obj):
         return obj.dailyEntryIssueType.issueTypeName if obj.dailyEntryIssueType else None
+
+    def get_dailyEntryClientCountryCode(self, obj):
+        if obj.dailyEntryClientCountryCode and obj.dailyEntryClientCountryCode.clientPhoneCountryCode:
+            return obj.dailyEntryClientCountryCode.clientPhoneCountryCode.dailCode
+        return None
+
+    # def get_dailyEntryClientCountryName(self, obj):
+    #     if obj.dailyEntryClientCountryCode and obj.dailyEntryClientCountryCode.clientPhoneCountryCode:
+    #         return obj.dailyEntryClientCountryCode.clientPhoneCountryCode.countryName
+    #     return None
+    #
+    # def get_dailyEntryClientCountryDialCode(self, obj):
+    #     if obj.dailyEntryClientCountryCode and obj.dailyEntryClientCountryCode.clientPhoneCountryCode:
+    #         return obj.dailyEntryClientCountryCode.clientPhoneCountryCode.dailCode
+    #     return None

@@ -982,7 +982,16 @@ class AmcEntryViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['GET'])
     def countries(self, request):
-        country_data = [{"code": code, "name": name} for code, name in list(countries)]
+        countries = CountryModel.objects.filter(hideStatus=0).values('id', 'countryCode', 'countryName', 'dailCode')
+        country_data = [
+            {
+                "id": country['id'],
+                "code": country['countryCode'],
+                "name": country['countryName'],
+                "dial_code": country['dailCode']
+            }
+            for country in countries
+        ]
         return Response(country_data)
 
     @action(detail=True, methods=['GET'])
@@ -1818,7 +1827,7 @@ class IssueViewSet(viewsets.ModelViewSet):
                     estimated_days=issue_type.estimatedIssueDay
                 )
 
-                # Create IssueModel
+                # Create IssueModel without creating DailyEntry
                 issue = IssueModel.objects.create(
                     issueClientName=client,
                     issueType=issue_type,
@@ -1828,20 +1837,7 @@ class IssueViewSet(viewsets.ModelViewSet):
                     hideStatus=0
                 )
 
-                # Create associated DailyEntryModel
-                daily_entry = DailyEntryModel.objects.create(
-                    dailyEntryClientPanNumber=client,
-                    dailyEntryClientName=client,
-                    dailyEntryClientMobileNumber=client,
-                    dailyEntryIssueType=issue_type,
-                    applicationDate=issue_date
-                )
-
-                # Link DailyEntryModel to IssueModel
-                issue.issueDailyEntry = daily_entry
-                issue.save()
-
-                message = 'Issue and associated daily entry created successfully'
+                message = 'Issue created successfully'
             else:  # Update existing issue
                 issue = IssueModel.objects.get(id=pk)
                 issue_resolution_date = datetime.strptime(data['issueResolutionDate'], '%Y-%m-%d').date()
@@ -1854,13 +1850,14 @@ class IssueViewSet(viewsets.ModelViewSet):
                 issue.issueDescription = data['issueDescription']
                 issue.save()
 
-                # Update associated DailyEntryModel
+                # Only update associated DailyEntryModel if it exists
                 if issue.issueDailyEntry:
                     daily_entry = issue.issueDailyEntry
                     daily_entry.dailyEntryIssueType = issue_type
                     daily_entry.save()
-
-                message = 'Issue and associated daily entry updated successfully'
+                    message = 'Issue and associated daily entry updated successfully'
+                else:
+                    message = 'Issue updated successfully'
 
             return Response({
                 'code': 1,
@@ -1872,7 +1869,7 @@ class IssueViewSet(viewsets.ModelViewSet):
             transaction.set_rollback(True)
             return Response({
                 'code': 0,
-                'message': f'Failed to process issue and daily entry: {str(e)}'
+                'message': f'Failed to process issue: {str(e)}'
             }, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['GET'])
