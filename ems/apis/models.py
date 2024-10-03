@@ -773,7 +773,7 @@ class DailyEntryModel(models.Model):
     dailyEntryClientMobileNumber = models.ForeignKey(ClientModel, on_delete=models.CASCADE,
                                                      related_name="dailyEntryClientMobileNumber",
                                                      null=True, blank=True)
-    dailyEntryClientCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
+    dailyEntryClientCountryCode = models.ForeignKey(ClientModel, on_delete=models.CASCADE,
                                                     related_name="dailyEntryClientCountryCode",
                                                     null=True, blank=True)
     dailyEntryFundHouse = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="dailyEntryFundHouse",
