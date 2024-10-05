@@ -168,7 +168,7 @@ class ArnEntryModel(models.Model):
     arnPinCode = models.IntegerField(null=True, blank=True)
     arnEmail = models.EmailField(unique=True)
     arnEuin = models.CharField(max_length=200, null=True, blank=True)
-    arnGstNo = models.CharField(max_length=50, null=True, blank=True)
+    arnGstNo = models.CharField(max_length=50, null=True, blank=True, unique=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
