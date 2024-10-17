@@ -550,6 +550,7 @@ class DailyEntryModelSerializers(serializers.ModelSerializer):
     dailyEntryFundName = serializers.SerializerMethodField()
     dailyEntryIssueType = serializers.SerializerMethodField()
     dailyEntryClientCountryCode = serializers.SerializerMethodField()
+
     # dailyEntryClientCountryName = serializers.SerializerMethodField()
     # dailyEntryClientCountryDialCode = serializers.SerializerMethodField()
 
@@ -586,3 +587,9 @@ class DailyEntryModelSerializers(serializers.ModelSerializer):
     #     if obj.dailyEntryClientCountryCode and obj.dailyEntryClientCountryCode.clientPhoneCountryCode:
     #         return obj.dailyEntryClientCountryCode.clientPhoneCountryCode.dailCode
     #     return None
+
+
+class ActivityLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ActivityLog
+        fields = '__all__'

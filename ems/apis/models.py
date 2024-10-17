@@ -1,11 +1,11 @@
 from django.core.validators import FileExtensionValidator
-from django_countries.fields import CountryField
 from django.db import models
 import os
 import uuid
 from django.core.files.storage import FileSystemStorage
 from django.contrib.auth.hashers import make_password, check_password
 from django.db.models import Index
+from django.contrib.auth.models import User
 
 
 class UniqueFileStorage(FileSystemStorage):
@@ -160,11 +160,13 @@ class ArnEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
     arnNumber = models.CharField(max_length=200, null=True, blank=True, unique=True)
     arnName = models.CharField(max_length=200, null=True, blank=True)
-    arnCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="arnCountryCode", null=True, blank=True)
+    arnCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="arnCountryCode", null=True,
+                                       blank=True)
     arnMobile = models.CharField(max_length=55, null=True, blank=True)
     arnAddress = models.CharField(max_length=500, null=True, blank=True)
     arnState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="arnState", null=True, blank=True)
-    arnCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="arnCountry", null=True, blank=True)
+    arnCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="arnCountry", null=True,
+                                   blank=True)
     arnPinCode = models.IntegerField(null=True, blank=True)
     arnEmail = models.EmailField(unique=True)
     arnEuin = models.CharField(max_length=200, null=True, blank=True)
@@ -366,7 +368,8 @@ class EmployeeModel(models.Model):
     id = models.AutoField(primary_key=True)
     employeeName = models.CharField(max_length=500, null=True, blank=True)
     employeeEmail = models.EmailField(unique=True)
-    employeeCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="employeeCountryCode", null=True, blank=True)
+    employeeCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="employeeCountryCode",
+                                            null=True, blank=True)
     employeePhone = models.CharField(max_length=55, null=True, blank=True)
     employeePassword = models.CharField(max_length=500, null=True, blank=True)
     employeeAddress = models.CharField(max_length=2500, null=True, blank=True)
@@ -401,7 +404,8 @@ class ClientModel(models.Model):
                                                related_name="clientPhoneCountryCode", null=True, blank=True)
     clientPhone = models.CharField(max_length=500, null=True, blank=True)
     clientAlternatePhoneCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
-                                                        related_name="clientAlternatePhoneCountryCode", null=True, blank=True)
+                                                        related_name="clientAlternatePhoneCountryCode", null=True,
+                                                        blank=True)
     clientAlternatePhone = models.CharField(max_length=500, null=True, blank=True)
     clientPanNo = models.CharField(max_length=500, null=True, blank=True)
     clientKycNo = models.CharField(max_length=500, null=True, blank=True, unique=True)
@@ -420,7 +424,8 @@ class ClientModel(models.Model):
     clientMaritalStatus = models.ForeignKey(MaritalStatusModel, on_delete=models.CASCADE,
                                             related_name="clientMaritalStatus", null=True, blank=True)
     clientAnniversaryDate = models.DateField(null=True, blank=True)
-    clientCountryOfBirth = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="clientCountryOfBirth", null=True, blank=True)
+    clientCountryOfBirth = models.ForeignKey(CountryModel, on_delete=models.CASCADE,
+                                             related_name="clientCountryOfBirth", null=True, blank=True)
     clientPlaceOfBirth = models.CharField(max_length=500, null=True, blank=True)
     clientCitizenship = models.CharField(max_length=500, null=True, blank=True)
     clientResidentialStatus = models.CharField(max_length=500, null=True, blank=True)
@@ -517,7 +522,8 @@ class ClientOfficeAddressModel(models.Model):
     clientOfficeState = models.ForeignKey(StateModel, on_delete=models.CASCADE, related_name="clientOfficeState",
                                           null=True, blank=True)
     clientOfficePincode = models.IntegerField(null=True, blank=True)
-    clientOfficeCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="clientOfficeCountry", null=True, blank=True)
+    clientOfficeCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="clientOfficeCountry",
+                                            null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -693,7 +699,8 @@ class ClientTaxModel(models.Model):
                                     blank=True)
     clientTaxIdDetail = models.CharField(max_length=500, null=True, blank=True)
     clientTaxIdNo = models.CharField(max_length=500, null=True, blank=True)
-    clientTaxCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="clientTaxCountry", null=True, blank=True)
+    clientTaxCountry = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="clientTaxCountry",
+                                         null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
@@ -728,7 +735,8 @@ class CourierModel(models.Model):
     courierClientName = models.ForeignKey(ClientModel, on_delete=models.CASCADE, related_name="courierClientName",
                                           null=True, blank=True)
     courierClientAddress = models.CharField(max_length=500, null=True, blank=True)
-    courierCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="courierCountryCode", null=True, blank=True)
+    courierCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="courierCountryCode",
+                                           null=True, blank=True)
     courierMobileNumber = models.CharField(max_length=55, null=True, blank=True)
     courierEmail = models.EmailField(unique=True)
     hideStatus = models.IntegerField(default=0)
@@ -808,3 +816,19 @@ class IssueModel(models.Model):
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
+
+
+class ActivityLog(models.Model):
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    username = models.CharField(max_length=255)
+    action = models.CharField(max_length=50)  # LOGIN, LOGOUT, CREATE, UPDATE, DELETE
+    entity_type = models.CharField(max_length=100)  # Model name or entity type
+    entity_id = models.CharField(max_length=100, null=True)  # ID of affected entity
+    details = models.JSONField(null=True)  # Additional details about the action
+    previous_data = models.JSONField(null=True)  # Store existing data before update/delete
+    ip_address = models.GenericIPAddressField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']

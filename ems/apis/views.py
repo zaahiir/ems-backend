@@ -4,7 +4,6 @@ from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
-from django_countries import countries
 from django_countries.fields import Country
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -17,15 +16,10 @@ import urllib.parse
 from .serializers import *
 from django.http import JsonResponse
 from datetime import datetime, timedelta
-from django.utils import timezone
-from .utils import get_tokens_for_user
-from rest_framework.pagination import PageNumberPagination
-from rest_framework.pagination import CursorPagination
+from .utils import get_tokens_for_user, ActivityLogger
 from django.core.management import call_command
 from django.db.models import Q
-from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db.models import Max
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +44,7 @@ class UserViewSet(viewsets.ViewSet):
         # Authenticate superuser
         user = authenticate(username=username, password=password)
         if user and user.is_superuser:
+            ActivityLogger.log_auth(request, 'LOGIN')
             tokens = get_tokens_for_user({
                 'username': user.username,
                 'id': user.id,
@@ -159,6 +154,7 @@ class UserViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'])
     def logout(self, request):
         try:
+            ActivityLogger.log_auth(request, 'LOGOUT')
             refresh_token = request.data.get("refresh_token")
             if not refresh_token:
                 raise ValidationError("Refresh token is required")
@@ -1165,6 +1161,10 @@ class AumEntryViewSet(viewsets.ModelViewSet):
     serializer_class = AumEntryModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        """Helper method to get previous data in serialized form"""
+        return self.get_serializer(instance).data
+
     @action(detail=False, methods=['GET'])
     def listing(self, request):
         user = request.user
@@ -1246,23 +1246,55 @@ class AumEntryViewSet(viewsets.ModelViewSet):
         if user.is_authenticated:
             data = request.data.copy()
 
-            # Ensure aumMonth is in YYYY-MM format
+            # Validate aumMonth format
             if 'aumMonth' in data:
                 try:
-                    # Validate the format
                     datetime.strptime(data['aumMonth'], '%Y-%m')
                 except ValueError:
                     return Response({'code': 0, 'message': "Invalid aumMonth format. Use YYYY-MM."})
+
             if pk == "0":
-                serializer = AumEntryModelSerializers(data=request.data)
+                # Create operation
+                serializer = self.get_serializer(data=request.data)
+                if serializer.is_valid():
+                    instance = serializer.save()
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='CREATE',
+                        entity_type='AumEntry',
+                        entity_id=instance.id,
+                        details={'new_data': serializer.data}
+                    )
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    print("Serializer errors:", serializer.errors)
+                    response = {'code': 0, 'message': "Unable to Process Request"}
             else:
-                serializer = AumEntryModelSerializers(instance=AumEntryModel.objects.get(id=pk), data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                print("Serializer errors:", serializer.errors)
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                # Update operation
+                try:
+                    instance = AumEntryModel.objects.get(id=pk)
+                    # Capture previous data before update
+                    previous_data = self.get_previous_data(instance)
+
+                    serializer = self.get_serializer(instance, data=request.data)
+                    if serializer.is_valid():
+                        # Log before saving the changes
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='AumEntry',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+                        # Save the changes
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        print("Serializer errors:", serializer.errors)
+                        response = {'code': 0, 'message': "Unable to Process Request"}
+                except AumEntryModel.DoesNotExist:
+                    response = {'code': 0, 'message': "AumEntry not found"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1271,8 +1303,27 @@ class AumEntryViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            AumEntryModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                instance = AumEntryModel.objects.get(id=pk)
+                # Capture the data before deletion
+                previous_data = self.get_previous_data(instance)
+
+                # Log the deletion with the captured data
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='AumEntry',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                instance.hideStatus = 1
+                instance.save()
+
+                response = {'code': 1, 'message': "Done Successfully"}
+            except AumEntryModel.DoesNotExist:
+                response = {'code': 0, 'message': "AumEntry not found"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
