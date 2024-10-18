@@ -908,11 +908,16 @@ class AccountPreferenceViewSet(viewsets.ModelViewSet):
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
+#End of Masters
+
 
 class ArnEntryViewSet(viewsets.ModelViewSet):
     queryset = ArnEntryModel.objects.filter(hideStatus=0)
     serializer_class = ArnEntryModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=False, methods=['GET'])
     def countries(self, request):
@@ -975,6 +980,9 @@ class AmcEntryViewSet(viewsets.ModelViewSet):
     queryset = AmcEntryModel.objects.filter(hideStatus=0)
     serializer_class = AmcEntryModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=False, methods=['GET'])
     def countries(self, request):
@@ -1042,6 +1050,9 @@ class FundViewSet(viewsets.ModelViewSet):
     queryset = FundModel.objects.filter(hideStatus=0)
     serializer_class = FundModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=False, methods=['GET'])
     def by_amc(self, request):
@@ -1162,7 +1173,6 @@ class AumEntryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_previous_data(self, instance):
-        """Helper method to get previous data in serialized form"""
         return self.get_serializer(instance).data
 
     @action(detail=False, methods=['GET'])
@@ -1334,6 +1344,9 @@ class CommissionEntryViewSet(viewsets.ModelViewSet):
     serializer_class = CommissionEntryModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
+
     @action(detail=False, methods=['GET'])
     def listing(self, request):
         user = request.user
@@ -1450,6 +1463,9 @@ class AumYoyGrowthEntryViewSet(viewsets.ModelViewSet):
     serializer_class = AumYoyGrowthEntryModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
+
     @action(detail=False, methods=['GET'])
     def listing(self, request):
         user = request.user
@@ -1553,6 +1569,9 @@ class IndustryAumEntryViewSet(viewsets.ModelViewSet):
     queryset = IndustryAumEntryModel.objects.filter(hideStatus=0)
     serializer_class = IndustryAumEntryModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=False, methods=['GET'])
     def listing(self, request):
@@ -1660,6 +1679,9 @@ class GstEntryViewSet(viewsets.ModelViewSet):
     queryset = GstEntryModel.objects.filter(hideStatus=0)
     serializer_class = GstEntryModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=False, methods=['GET'])
     def listing(self, request):
@@ -1773,6 +1795,9 @@ class IssueViewSet(viewsets.ModelViewSet):
     queryset = IssueModel.objects.filter(hideStatus=0)
     serializer_class = IssueModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     def calculate_resolution_date(self, start_date, estimated_days):
         current_date = start_date
@@ -1962,6 +1987,9 @@ class StatementViewSet(viewsets.ModelViewSet):
     serializer_class = StatementModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
+
     @action(detail=False, methods=['GET'])
     def listing(self, request):
         user = request.user
@@ -2068,6 +2096,9 @@ class CourierViewSet(viewsets.ModelViewSet):
     queryset = CourierModel.objects.filter(hideStatus=0)
     serializer_class = CourierModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=False, methods=['GET'])
     def listing(self, request):
@@ -2183,6 +2214,9 @@ class CourierFileViewSet(viewsets.ModelViewSet):
     serializer_class = CourierFileModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
+
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
         user = request.user
@@ -2216,6 +2250,9 @@ class FormsViewSet(viewsets.ModelViewSet):
     queryset = FormsModel.objects.filter(hideStatus=0)
     serializer_class = FormsModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=False, methods=['GET'])
     def listing(self, request):
@@ -2322,6 +2359,9 @@ class MarketingViewSet(viewsets.ModelViewSet):
     queryset = MarketingModel.objects.filter(hideStatus=0)
     serializer_class = MarketingModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=False, methods=['GET'])
     def listing(self, request):
@@ -2468,6 +2508,9 @@ class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
+
     @action(detail=False, methods=['GET'])
     def listing(self, request):
         user = request.user
@@ -2569,7 +2612,10 @@ class TaskViewSet(viewsets.ModelViewSet):
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = EmployeeModel.objects.filter(hideStatus=0)
     serializer_class = EmployeeModelSerializers
-    permission_classes = [IsAuthenticated]  # Ensure only authenticated users can access these views
+    permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
@@ -2661,6 +2707,9 @@ class ClientViewSet(viewsets.ModelViewSet):
     queryset = ClientModel.objects.filter(hideStatus=0)
     serializer_class = ClientModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=False, methods=['GET'])
     def listing(self, request):
@@ -3060,6 +3109,9 @@ class ClientFamilyDetailViewSet(viewsets.ModelViewSet):
     serializer_class = ClientFamilyDetailModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
+
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
         user = request.user
@@ -3110,6 +3162,9 @@ class ClientChildrenDetailViewSet(viewsets.ModelViewSet):
     queryset = ClientChildrenDetailModel.objects.filter(hideStatus=0)
     serializer_class = ClientChildrenDetailModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
@@ -3162,6 +3217,9 @@ class ClientPresentAddressViewSet(viewsets.ModelViewSet):
     serializer_class = ClientPresentAddressModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
+
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
         user = request.user
@@ -3212,6 +3270,9 @@ class ClientPermanentAddressViewSet(viewsets.ModelViewSet):
     queryset = ClientPermanentAddressModel.objects.filter(hideStatus=0)
     serializer_class = ClientPermanentAddressModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
@@ -3264,6 +3325,9 @@ class ClientOfficeAddressViewSet(viewsets.ModelViewSet):
     serializer_class = ClientOfficeAddressModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
+
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
         user = request.user
@@ -3314,6 +3378,9 @@ class ClientOverseasAddressViewSet(viewsets.ModelViewSet):
     queryset = ClientOverseasAddressModel.objects.filter(hideStatus=0)
     serializer_class = ClientOverseasAddressModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
@@ -3366,6 +3433,9 @@ class ClientNomineeViewSet(viewsets.ModelViewSet):
     serializer_class = ClientNomineeModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
+
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
         user = request.user
@@ -3416,6 +3486,9 @@ class ClientMedicalInsuranceViewSet(viewsets.ModelViewSet):
     queryset = ClientMedicalInsuranceModel.objects.filter(hideStatus=0)
     serializer_class = ClientMedicalInsuranceModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
@@ -3468,6 +3541,9 @@ class ClientTermInsuranceViewSet(viewsets.ModelViewSet):
     serializer_class = ClientTermInsuranceModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
+
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
         user = request.user
@@ -3518,6 +3594,9 @@ class ClientUploadFileViewSet(viewsets.ModelViewSet):
     queryset = ClientUploadFileModel.objects.filter(hideStatus=0)
     serializer_class = ClientUploadFileModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
@@ -3570,6 +3649,9 @@ class ClientBankViewSet(viewsets.ModelViewSet):
     serializer_class = ClientBankModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
+
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
         user = request.user
@@ -3619,6 +3701,9 @@ class ClientTaxViewSet(viewsets.ModelViewSet):
     serializer_class = ClientTaxModelSerializers
     permission_classes = [IsAuthenticated]
 
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
+
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
         user = request.user
@@ -3667,6 +3752,9 @@ class ClientPowerOfAttorneyViewSet(viewsets.ModelViewSet):
     queryset = ClientPowerOfAttorneyModel.objects.filter(hideStatus=0)
     serializer_class = ClientPowerOfAttorneyModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
@@ -3723,6 +3811,9 @@ class NavViewSet(viewsets.ModelViewSet):
     queryset = NavModel.objects.filter(hideStatus=0).order_by('-id')
     serializer_class = NavModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     @action(detail=False, methods=['GET'])
     def listing(self, request):
@@ -3926,6 +4017,9 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
     queryset = DailyEntryModel.objects.filter(hideStatus=0)
     serializer_class = DailyEntryModelSerializers
     permission_classes = [IsAuthenticated]
+
+    def get_previous_data(self, instance):
+        return self.get_serializer(instance).data
 
     def calculate_working_days(self, start_date, days):
         current_date = start_date
