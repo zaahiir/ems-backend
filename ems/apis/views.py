@@ -39,22 +39,12 @@ class UserViewSet(viewsets.ViewSet):
         dob = request.data.get('dob')
 
         if not username:
-            return Response({"detail": "Username is required"}, status=400)
+            return Response({"detail": "Username is required"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Authenticate superuser
         user = authenticate(username=username, password=password)
         if user and user.is_superuser:
-            # Log successful superuser login
-            ActivityLogger.log_activity(
-                request=request,
-                action='LOGIN',
-                entity_type='Authentication',
-                details={
-                    'username': username,
-                    'user_type': 'superuser',
-                    'message': f"Superuser {username} logged in"
-                }
-            )
+            ActivityLogger.log_auth(request, 'LOGIN')
             tokens = get_tokens_for_user({
                 'username': user.username,
                 'id': user.id,
@@ -66,100 +56,59 @@ class UserViewSet(viewsets.ViewSet):
                 'user_id': user.id,
                 'username': user.username,
                 'email': user.email,
-            })
+            }, status=status.HTTP_200_OK)
 
         # Check Employee credentials
         employee = EmployeeModel.objects.filter(employeeEmail=username).first()
-        if employee and employee.check_password(password):
-            # Log successful employee login
-            ActivityLogger.log_activity(
-                request=request,
-                action='LOGIN',
-                entity_type='Authentication',
-                details={
-                    'username': username,
+        if employee:
+            if not password:
+                return Response({"detail": "Password is required for employee login"},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            if employee.check_password(password):
+                tokens = get_tokens_for_user({
+                    'username': employee.employeeEmail,
+                    'id': employee.id,
+                    'user_type': 'employee'
+                })
+                return Response({
+                    **tokens,
                     'user_type': 'employee',
-                    'message': f"Employee {username} logged in"
-                }
-            )
+                    'user_id': employee.id,
+                    'name': employee.employeeName,
+                    'email': employee.employeeEmail,
+                    'user_type_id': employee.employeeUserType.id if employee.employeeUserType else None,
+                    'user_type_name': employee.employeeUserType.userTypeName if employee.employeeUserType else None,
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({"detail": "Invalid password for employee"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # Check Client credentials
+        if not dob:
+            return Response({"detail": "Date of Birth is required for client login"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            dob_date = datetime.strptime(dob, '%Y-%m-%d').date()
+        except ValueError:
+            return Response({"detail": "Invalid date format. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+
+        client = ClientModel.objects.filter(clientPanNo=username, clientDateOfBirth=dob_date).first()
+        if client:
             tokens = get_tokens_for_user({
-                'username': employee.employeeEmail,
-                'id': employee.id,
-                'user_type': 'employee'
+                'username': client.clientPanNo,
+                'id': client.id,
+                'user_type': 'client'
             })
             return Response({
                 **tokens,
-                'user_type': 'employee',
-                'user_id': employee.id,
-                'name': employee.employeeName,
-                'email': employee.employeeEmail,
-            })
+                'user_type': 'client',
+                'user_id': client.id,
+                'name': client.clientName,
+                'email': client.clientEmail,
+            }, status=status.HTTP_200_OK)
 
-        # Check Client credentials
-        if dob:
-            try:
-                dob_date = datetime.strptime(dob, '%Y-%m-%d').date()
-                client = ClientModel.objects.filter(clientPanNo=username, clientDateOfBirth=dob_date).first()
-                if client:
-                    # Log successful client login
-                    ActivityLogger.log_activity(
-                        request=request,
-                        action='LOGIN',
-                        entity_type='Authentication',
-                        details={
-                            'username': username,
-                            'user_type': 'client',
-                            'message': f"Client {username} logged in"
-                        }
-                    )
-                    tokens = get_tokens_for_user({
-                        'username': client.clientPanNo,
-                        'id': client.id,
-                        'user_type': 'client'
-                    })
-                    return Response({
-                        **tokens,
-                        'user_type': 'client',
-                        'user_id': client.id,
-                        'name': client.clientName,
-                        'email': client.clientEmail,
-                    })
-            except ValueError:
-                return Response({"detail": "Invalid date format. Use YYYY-MM-DD."}, status=400)
-
-        return Response({"detail": "Invalid credentials"}, status=401)
-
-    @action(detail=False, methods=['post'])
-    def logout(self, request):
-        try:
-            refresh_token = request.data.get("refresh_token")
-            if not refresh_token:
-                raise ValidationError("Refresh token is required")
-
-            # Get user info before blacklisting token
-            user = request.user
-            username = user.username if user.is_authenticated else 'Anonymous'
-
-            # Log logout activity
-            ActivityLogger.log_activity(
-                request=request,
-                action='LOGOUT',
-                entity_type='Authentication',
-                details={
-                    'username': username,
-                    'message': f"User {username} logged out"
-                }
-            )
-
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-            return Response({"detail": "Successfully logged out."})
-        except TokenError:
-            return Response({"detail": "Invalid token"}, status=400)
-        except ValidationError as e:
-            return Response({"detail": str(e)}, status=400)
-        except Exception as e:
-            return Response({"detail": "An error occurred during logout"}, status=500)
+        return Response({"detail": "No user found with provided credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
     @action(detail=False, methods=['get'])
     def profile(self, request):
@@ -201,6 +150,24 @@ class UserViewSet(viewsets.ViewSet):
             pass
 
         return Response({'detail': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['post'])
+    def logout(self, request):
+        try:
+            ActivityLogger.log_auth(request, 'LOGOUT')
+            refresh_token = request.data.get("refresh_token")
+            if not refresh_token:
+                raise ValidationError("Refresh token is required")
+
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+            return Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
+        except TokenError:
+            return Response({"detail": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
+        except ValidationError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"detail": "An error occurred during logout"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class UserTypeViewSet(viewsets.ModelViewSet):
@@ -1276,101 +1243,89 @@ class AumEntryViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
         user = request.user
-        if not user.is_authenticated:
-            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
+        if user.is_authenticated:
+            data = request.data.copy()
 
-        data = request.data.copy()
+            # Validate aumMonth format
+            if 'aumMonth' in data:
+                try:
+                    datetime.strptime(data['aumMonth'], '%Y-%m')
+                except ValueError:
+                    return Response({'code': 0, 'message': "Invalid aumMonth format. Use YYYY-MM."})
 
-        # Validate aumMonth format
-        if 'aumMonth' in data:
-            try:
-                datetime.strptime(data['aumMonth'], '%Y-%m')
-            except ValueError:
-                return Response({'code': 0, 'message': "Invalid aumMonth format. Use YYYY-MM."})
-
-        if pk == "0":
-            # Create operation
-            serializer = self.get_serializer(data=request.data)
-            if serializer.is_valid():
-                instance = serializer.save()
-                # Log creation with username
-                ActivityLogger.log_activity(
-                    request=request,
-                    action='CREATE',
-                    entity_type='AumEntry',
-                    entity_id=instance.id,
-                    details={
-                        'new_data': serializer.data,
-                        'action_by': user.username,
-                        'message': f"Record created by {user.username}"
-                    }
-                )
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            # Update operation
-            try:
-                instance = AumEntryModel.objects.get(id=pk)
-                # Capture previous data before update
-                previous_data = self.get_previous_data(instance)
-
-                serializer = self.get_serializer(instance, data=request.data)
+            if pk == "0":
+                # Create operation
+                serializer = self.get_serializer(data=request.data)
                 if serializer.is_valid():
-                    # Log update with username and previous data
+                    instance = serializer.save()
                     ActivityLogger.log_activity(
                         request=request,
-                        action='UPDATE',
+                        action='CREATE',
                         entity_type='AumEntry',
-                        entity_id=pk,
-                        details={
-                            'new_data': serializer.validated_data,
-                            'action_by': user.username,
-                            'message': f"Record updated by {user.username}"
-                        },
-                        previous_data=previous_data
+                        entity_id=instance.id,
+                        details={'new_data': serializer.data}
                     )
-                    serializer.save()
                     response = {'code': 1, 'message': "Done Successfully"}
                 else:
+                    print("Serializer errors:", serializer.errors)
                     response = {'code': 0, 'message': "Unable to Process Request"}
-            except AumEntryModel.DoesNotExist:
-                response = {'code': 0, 'message': "AumEntry not found"}
+            else:
+                # Update operation
+                try:
+                    instance = AumEntryModel.objects.get(id=pk)
+                    # Capture previous data before update
+                    previous_data = self.get_previous_data(instance)
 
+                    serializer = self.get_serializer(instance, data=request.data)
+                    if serializer.is_valid():
+                        # Log before saving the changes
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='AumEntry',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+                        # Save the changes
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        print("Serializer errors:", serializer.errors)
+                        response = {'code': 0, 'message': "Unable to Process Request"}
+                except AumEntryModel.DoesNotExist:
+                    response = {'code': 0, 'message': "AumEntry not found"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
         user = request.user
-        if not user.is_authenticated:
-            return Response({'code': 0, 'message': "Token is invalid"}, status=401)
+        if user.is_authenticated:
+            try:
+                instance = AumEntryModel.objects.get(id=pk)
+                # Capture the data before deletion
+                previous_data = self.get_previous_data(instance)
 
-        try:
-            instance = AumEntryModel.objects.get(id=pk)
-            # Capture the complete data before deletion
-            previous_data = self.get_previous_data(instance)
+                # Log the deletion with the captured data
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='AumEntry',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
 
-            # Log deletion with username and complete previous data
-            ActivityLogger.log_activity(
-                request=request,
-                action='DELETE',
-                entity_type='AumEntry',
-                entity_id=pk,
-                details={
-                    'action_by': user.username,
-                    'message': f"Record deleted by {user.username}"
-                },
-                previous_data=previous_data
-            )
+                # Soft delete the instance
+                instance.hideStatus = 1
+                instance.save()
 
-            # Soft delete the instance
-            instance.hideStatus = 1
-            instance.save()
-
-            response = {'code': 1, 'message': "Done Successfully"}
-        except AumEntryModel.DoesNotExist:
-            response = {'code': 0, 'message': "AumEntry not found"}
-
+                response = {'code': 1, 'message': "Done Successfully"}
+            except AumEntryModel.DoesNotExist:
+                response = {'code': 0, 'message': "AumEntry not found"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
 
