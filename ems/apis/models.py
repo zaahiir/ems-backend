@@ -738,7 +738,7 @@ class CourierModel(models.Model):
     courierCountryCode = models.ForeignKey(CountryModel, on_delete=models.CASCADE, related_name="courierCountryCode",
                                            null=True, blank=True)
     courierMobileNumber = models.CharField(max_length=55, null=True, blank=True)
-    courierEmail = models.EmailField(unique=True)
+    courierEmail = models.EmailField()
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)

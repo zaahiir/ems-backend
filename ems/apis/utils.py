@@ -7,6 +7,7 @@ from decimal import Decimal
 from rest_framework_simplejwt.tokens import RefreshToken
 from ipware import get_client_ip
 from .models import ActivityLog
+import datetime
 import json
 
 User = get_user_model()
@@ -29,98 +30,101 @@ def get_tokens_for_user(user_data):
 
 class ActivityLogger:
     @staticmethod
+    def serialize_date(obj):
+        if isinstance(obj, (datetime.date, datetime.datetime)):
+            return obj.isoformat()
+        raise TypeError(f"Type {type(obj)} not serializable")
+
+    @staticmethod
+    def handle_file_upload(file):
+        """Handle file upload objects by extracting relevant information"""
+        if hasattr(file, 'name') and hasattr(file, 'size'):
+            return {
+                'filename': file.name,
+                'size': file.size,
+                'content_type': getattr(file, 'content_type', None)
+            }
+        return str(file)
+
+    @staticmethod
     def normalize_value(value):
-        """
-        Convert complex data types to simple JSON-serializable values
-        """
+        """Convert complex data types to simple JSON-serializable values"""
         if isinstance(value, Model):
-            # If the model has a specific field to use as display value
             if hasattr(value, 'amcName'):
                 return value.amcName
             elif hasattr(value, 'arnNumber'):
                 return value.arnNumber
-            # Fallback to ID
             return value.id
         elif isinstance(value, Decimal):
             return str(value)
+        elif isinstance(value, (datetime.date, datetime.datetime)):
+            return ActivityLogger.serialize_date(value)
         elif isinstance(value, (list, tuple)):
             return [ActivityLogger.normalize_value(item) for item in value]
         elif isinstance(value, dict):
             return {k: ActivityLogger.normalize_value(v) for k, v in value.items()}
+        elif hasattr(value, '_name') and hasattr(value, 'file'):  # InMemoryUploadedFile check
+            return ActivityLogger.handle_file_upload(value)
         return value
 
     @staticmethod
+    def clean_request_data(request_data):
+        """Clean request data by handling file uploads and other complex types"""
+        if isinstance(request_data, dict):
+            cleaned_data = {}
+            for key, value in request_data.items():
+                if key == 'courierFile' and hasattr(value, '_name'):
+                    cleaned_data[key] = ActivityLogger.handle_file_upload(value)
+                else:
+                    cleaned_data[key] = ActivityLogger.normalize_value(value)
+            return cleaned_data
+        return request_data
+
+    @staticmethod
     def serialize_model_instance(instance):
-        """
-        Serialize a model instance to clean, normalized format
-        """
+        """Serialize a model instance to clean, normalized format"""
         if instance is None:
             return None
 
         try:
-            # Convert model instance to dict
             data = model_to_dict(instance)
-
-            # Normalize all values
             normalized_data = {
                 key: ActivityLogger.normalize_value(value)
                 for key, value in data.items()
             }
-
             return normalized_data
-
         except Exception as e:
             print(f"Serialization error: {str(e)}")
             return None
 
     @staticmethod
     def prepare_details(request, details=None, instance=None):
-        """
-        Prepare details in the exact format needed
-        """
+        """Prepare details in the exact format needed"""
         normalized_details = {
             'path': request.path,
             'method': request.method,
-            'timestamp': now().isoformat(),
+            'timestamp': ActivityLogger.serialize_date(now()),
         }
 
-        # Handle data from details dict
         if details and 'new_data' in details:
             data = details['new_data']
             if isinstance(data, str):
                 try:
-                    # Try to parse string representation of dict
                     import ast
                     data = ast.literal_eval(data)
                 except:
                     data = {'raw_data': data}
 
-            if isinstance(data, dict):
-                normalized_data = {
-                    k: ActivityLogger.normalize_value(v)
-                    for k, v in data.items()
-                }
-            else:
-                normalized_data = ActivityLogger.normalize_value(data)
+            # Clean the request data
+            normalized_details['data'] = ActivityLogger.clean_request_data(data)
 
-            normalized_details['data'] = normalized_data
-
-        # Handle instance data if no details provided
         elif instance:
             if hasattr(instance.__class__, 'get_serializer'):
                 serializer_class = instance.__class__.get_serializer()
                 normalized_data = serializer_class(instance).data
             else:
                 normalized_data = model_to_dict(instance)
-                normalized_data = {
-                    k: ActivityLogger.normalize_value(v)
-                    for k, v in normalized_data.items()
-                }
-                # Add timestamps if they exist
-                if hasattr(instance, 'created_at'):
-                    normalized_data['createdAt'] = instance.created_at.isoformat()
-                if hasattr(instance, 'updated_at'):
-                    normalized_data['updatedAt'] = instance.updated_at.isoformat()
+                normalized_data = ActivityLogger.clean_request_data(normalized_data)
 
             normalized_details['data'] = normalized_data
 
@@ -129,9 +133,7 @@ class ActivityLogger:
     @staticmethod
     def log_activity(request, action, entity_type=None, entity_id=None, details=None, instance=None,
                      previous_data=None):
-        """
-        Enhanced log activity method with backward compatibility
-        """
+        """Log activity with proper handling of file uploads"""
         try:
             client_ip, _ = get_client_ip(request)
             if not client_ip:
@@ -139,10 +141,13 @@ class ActivityLogger:
 
             username = request.user.username if request.user.is_authenticated else 'Anonymous'
 
-            # Prepare details in the exact format needed
+            # Clean and normalize the details
             normalized_details = ActivityLogger.prepare_details(request, details, instance)
 
-            # Create activity log entry
+            # Clean previous data if it exists
+            if previous_data:
+                previous_data = ActivityLogger.clean_request_data(previous_data)
+
             activity_log = ActivityLog(
                 user=request.user if request.user.is_authenticated else None,
                 username=username,
@@ -150,7 +155,7 @@ class ActivityLogger:
                 entity_type=entity_type,
                 entity_id=str(entity_id) if entity_id is not None else None,
                 details=normalized_details,
-                previous_data=ActivityLogger.normalize_value(previous_data) if previous_data else None,
+                previous_data=previous_data,
                 ip_address=client_ip
             )
             activity_log.save()
@@ -165,9 +170,7 @@ class ActivityLogger:
 
     @staticmethod
     def log_crud(request, action, model_name, instance_id, details=None, instance=None):
-        """
-        Log CRUD operations with normalized data
-        """
+        """Log CRUD operations with normalized data"""
         return ActivityLogger.log_activity(
             request=request,
             action=action,
@@ -185,7 +188,6 @@ class ActivityLogger:
             action=action,
             entity_type='Authentication'
         )
-
 
 def get_client_info(request):
     """Extract client information from request"""

@@ -310,8 +310,13 @@ class FormsModelSerializers(serializers.ModelSerializer):
         representation = super().to_representation(instance)
         representation['formsAmcName'] = instance.formsAmcName.amcName if instance.formsAmcName else None
         representation['formsType'] = instance.formsType.formTypeName if instance.formsType else None
-        if instance.formsFile:
-            representation['formsFile'] = self.context['request'].build_absolute_uri(instance.formsFile.url)
+        if instance.formsFile and hasattr(instance.formsFile, 'url'):
+            try:
+                representation['formsFile'] = self.context['request'].build_absolute_uri(instance.formsFile.url)
+            except (KeyError, AttributeError):
+                representation['formsFile'] = instance.formsFile.name if instance.formsFile else None
+        else:
+            representation['formsFile'] = None
         return representation
 
 

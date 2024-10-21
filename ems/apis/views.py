@@ -3,32 +3,36 @@ import traceback
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.serializers.json import DjangoJSONEncoder
+from django.forms.models import model_to_dict
 from django.db import transaction
-from django_countries.fields import Country
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import connection
 from django.contrib.auth import authenticate
 from rest_framework.permissions import IsAuthenticated
+from django.db.models import Q, Model
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 import urllib.parse
 from .serializers import *
 from django.http import JsonResponse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from decimal import Decimal
 from .utils import get_tokens_for_user, ActivityLogger
 from django.core.management import call_command
 from django.db.models import Q
 from django.core.paginator import Paginator
+import json
 
 logger = logging.getLogger(__name__)
 
 
 class CustomJSONEncoder(DjangoJSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Country):
-            return str(obj)
-        return super().default(obj)
+    class CustomJSONEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if isinstance(obj, (date, datetime)):
+                return obj.isoformat()
+            return super().default(obj)
 
 
 class UserViewSet(viewsets.ViewSet):
@@ -908,6 +912,7 @@ class AccountPreferenceViewSet(viewsets.ModelViewSet):
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
 
+
 #End of Masters
 
 
@@ -952,15 +957,51 @@ class ArnEntryViewSet(viewsets.ModelViewSet):
     def processing(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
+            data = request.data.copy()
+
             if pk == "0":
+                # Create operation
                 serializer = ArnEntryModelSerializers(data=request.data)
+                if serializer.is_valid():
+                    instance = serializer.save()
+                    # Log the create activity
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='CREATE',
+                        entity_type='ArnEntry',
+                        entity_id=instance.id,
+                        details={'new_data': serializer.data}
+                    )
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    print("Serializer errors:", serializer.errors)
+                    response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
             else:
-                serializer = ArnEntryModelSerializers(instance=ArnEntryModel.objects.get(id=pk), data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
+                # Update operation
+                try:
+                    instance = ArnEntryModel.objects.get(id=pk)
+                    # Capture previous data before update
+                    previous_data = self.get_previous_data(instance)
+
+                    serializer = ArnEntryModelSerializers(instance=instance, data=request.data)
+                    if serializer.is_valid():
+                        # Log before saving the changes
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='ArnEntry',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+                        # Save the changes
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        print("Serializer errors:", serializer.errors)
+                        response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
+                except ArnEntryModel.DoesNotExist:
+                    response = {'code': 0, 'message': "ArnEntry not found"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -969,8 +1010,27 @@ class ArnEntryViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            ArnEntryModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                instance = ArnEntryModel.objects.get(id=pk)
+                # Capture previous data before deletion
+                previous_data = self.get_previous_data(instance)
+
+                # Log the deletion with the captured data
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='ArnEntry',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                instance.hideStatus = 1
+                instance.save()
+
+                response = {'code': 1, 'message': "Done Successfully"}
+            except ArnEntryModel.DoesNotExist:
+                response = {'code': 0, 'message': "ArnEntry not found"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1018,19 +1078,48 @@ class AmcEntryViewSet(viewsets.ModelViewSet):
         user = request.user
         if user.is_authenticated:
             if pk == "0":
+                # Create operation
                 serializer = AmcEntryModelSerializers(data=request.data)
+                if serializer.is_valid():
+                    instance = serializer.save()
+                    # Log the create activity
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='CREATE',
+                        entity_type='AmcEntry',
+                        entity_id=instance.id,
+                        details={'new_data': serializer.data}
+                    )
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    print("Serializer errors:", serializer.errors)
+                    response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
             else:
+                # Update operation
                 try:
                     instance = AmcEntryModel.objects.get(id=pk)
+                    # Capture previous data before update
+                    previous_data = self.get_previous_data(instance)
+
+                    serializer = AmcEntryModelSerializers(instance=instance, data=request.data)
+                    if serializer.is_valid():
+                        # Log before saving the changes
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='AmcEntry',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+                        # Save the changes
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        print("Serializer errors:", serializer.errors)
+                        response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
                 except AmcEntryModel.DoesNotExist:
-                    return Response({'code': 0, 'message': "AMC not found"}, status=404)
-                serializer = AmcEntryModelSerializers(instance=instance, data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                print("Serializer errors:", serializer.errors)
-                response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
+                    response = {'code': 0, 'message': "AMC not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1039,8 +1128,27 @@ class AmcEntryViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            AmcEntryModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                instance = AmcEntryModel.objects.get(id=pk)
+                # Capture previous data before deletion
+                previous_data = self.get_previous_data(instance)
+
+                # Log the deletion with the captured data
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='AmcEntry',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                instance.hideStatus = 1
+                instance.save()
+
+                response = {'code': 1, 'message': "Done Successfully"}
+            except AmcEntryModel.DoesNotExist:
+                response = {'code': 0, 'message': "AMC not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1139,19 +1247,48 @@ class FundViewSet(viewsets.ModelViewSet):
         user = request.user
         if user.is_authenticated:
             if pk == "0":
+                # Create operation
                 serializer = FundModelSerializers(data=request.data)
+                if serializer.is_valid():
+                    instance = serializer.save()
+                    # Log the create activity
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='CREATE',
+                        entity_type='FundEntry',
+                        entity_id=instance.id,
+                        details={'new_data': serializer.data}
+                    )
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    print("Serializer errors:", serializer.errors)
+                    response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
             else:
+                # Update operation
                 try:
                     instance = FundModel.objects.get(id=pk)
+                    # Capture previous data before update
+                    previous_data = self.get_previous_data(instance)
+
+                    serializer = FundModelSerializers(instance=instance, data=request.data)
+                    if serializer.is_valid():
+                        # Log before saving the changes
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='FundEntry',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+                        # Save the changes
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        print("Serializer errors:", serializer.errors)
+                        response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
                 except FundModel.DoesNotExist:
-                    return Response({'code': 0, 'message': "AMC not found"}, status=404)
-                serializer = FundModelSerializers(instance=instance, data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                print("Serializer errors:", serializer.errors)
-                response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
+                    response = {'code': 0, 'message': "Fund not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1160,8 +1297,27 @@ class FundViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            FundModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                instance = FundModel.objects.get(id=pk)
+                # Capture previous data before deletion
+                previous_data = self.get_previous_data(instance)
+
+                # Log the deletion with the captured data
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='FundEntry',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                instance.hideStatus = 1
+                instance.save()
+
+                response = {'code': 1, 'message': "Done Successfully"}
+            except FundModel.DoesNotExist:
+                response = {'code': 0, 'message': "Fund not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1429,20 +1585,53 @@ class CommissionEntryViewSet(viewsets.ModelViewSet):
             # Ensure aumMonth is in YYYY-MM format
             if 'aumMonth' in data:
                 try:
-                    # Validate the format
-                    datetime.strptime(data['commissionMonth'], '%Y-%m')
+                    # Validate the format of aumMonth
+                    datetime.strptime(data['aumMonth'], '%Y-%m')
                 except ValueError:
                     return Response({'code': 0, 'message': "Invalid aumMonth format. Use YYYY-MM."})
+
             if pk == "0":
-                serializer = CommissionEntryModelSerializers(data=request.data)
+                # Create operation
+                serializer = CommissionEntryModelSerializers(data=data)
+                if serializer.is_valid():
+                    instance = serializer.save()
+
+                    # Log the create activity
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='CREATE',
+                        entity_type='CommissionEntry',
+                        entity_id=instance.id,
+                        details={'new_data': serializer.data}
+                    )
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
             else:
-                serializer = CommissionEntryModelSerializers(instance=CommissionEntryModel.objects.get(id=pk),
-                                                             data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                # Update operation
+                try:
+                    instance = CommissionEntryModel.objects.get(id=pk)
+                    # Capture previous data before update
+                    previous_data = self.get_previous_data(instance)
+
+                    serializer = CommissionEntryModelSerializers(instance=instance, data=data)
+                    if serializer.is_valid():
+                        # Log before saving the changes
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='CommissionEntry',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+                        # Save the changes
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
+                except CommissionEntryModel.DoesNotExist:
+                    response = {'code': 0, 'message': "Commission Entry not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1451,8 +1640,27 @@ class CommissionEntryViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            CommissionEntryModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                instance = CommissionEntryModel.objects.get(id=pk)
+                # Capture previous data before deletion
+                previous_data = self.get_previous_data(instance)
+
+                # Log the deletion with the captured data
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='CommissionEntry',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                instance.hideStatus = 1
+                instance.save()
+
+                response = {'code': 1, 'message': "Done Successfully"}
+            except CommissionEntryModel.DoesNotExist:
+                response = {'code': 0, 'message': "Commission Entry not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1540,16 +1748,50 @@ class AumYoyGrowthEntryViewSet(viewsets.ModelViewSet):
     def processing(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
+            data = request.data.copy()
+
             if pk == "0":
-                serializer = AumYoyGrowthEntryModelSerializers(data=request.data)
+                # Create operation
+                serializer = AumYoyGrowthEntryModelSerializers(data=data)
+                if serializer.is_valid():
+                    instance = serializer.save()
+
+                    # Log the create activity
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='CREATE',
+                        entity_type='AumYoyGrowthEntry',
+                        entity_id=instance.id,
+                        details={'new_data': serializer.data}
+                    )
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
             else:
-                serializer = AumYoyGrowthEntryModelSerializers(instance=AumYoyGrowthEntryModel.objects.get(id=pk),
-                                                               data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                # Update operation
+                try:
+                    instance = AumYoyGrowthEntryModel.objects.get(id=pk)
+                    # Capture previous data before update
+                    previous_data = self.get_previous_data(instance)
+
+                    serializer = AumYoyGrowthEntryModelSerializers(instance=instance, data=data)
+                    if serializer.is_valid():
+                        # Log before saving the changes
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='AumYoyGrowthEntry',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+                        # Save the changes
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
+                except AumYoyGrowthEntryModel.DoesNotExist:
+                    response = {'code': 0, 'message': "AUM YOY Growth Entry not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1558,8 +1800,27 @@ class AumYoyGrowthEntryViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            AumYoyGrowthEntryModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                instance = AumYoyGrowthEntryModel.objects.get(id=pk)
+                # Capture previous data before deletion
+                previous_data = self.get_previous_data(instance)
+
+                # Log the deletion with the captured data
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='AumYoyGrowthEntry',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                instance.hideStatus = 1
+                instance.save()
+
+                response = {'code': 1, 'message': "Done Successfully"}
+            except AumYoyGrowthEntryModel.DoesNotExist:
+                response = {'code': 0, 'message': "AUM YOY Growth Entry not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1649,17 +1910,50 @@ class IndustryAumEntryViewSet(viewsets.ModelViewSet):
     def processing(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
+            data = request.data.copy()
+
             if pk == "0":
-                serializer = IndustryAumEntryModelSerializers(data=request.data)
+                # Create operation
+                serializer = IndustryAumEntryModelSerializers(data=data)
+                if serializer.is_valid():
+                    instance = serializer.save()
+
+                    # Log the create activity
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='CREATE',
+                        entity_type='IndustryAumEntry',
+                        entity_id=instance.id,
+                        details={'new_data': serializer.data}
+                    )
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
             else:
-                serializer = IndustryAumEntryModelSerializers(instance=IndustryAumEntryModel.objects.get(id=pk),
-                                                              data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                # print(serializer.errors)
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                # Update operation
+                try:
+                    instance = IndustryAumEntryModel.objects.get(id=pk)
+                    # Capture previous data before update
+                    previous_data = self.get_previous_data(instance)
+
+                    serializer = IndustryAumEntryModelSerializers(instance=instance, data=data)
+                    if serializer.is_valid():
+                        # Log before saving the changes
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='IndustryAumEntry',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+                        # Save the changes
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
+                except IndustryAumEntryModel.DoesNotExist:
+                    response = {'code': 0, 'message': "Industry AUM Entry not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1668,8 +1962,27 @@ class IndustryAumEntryViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            IndustryAumEntryModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                instance = IndustryAumEntryModel.objects.get(id=pk)
+                # Capture previous data before deletion
+                previous_data = self.get_previous_data(instance)
+
+                # Log the deletion with the captured data
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='IndustryAumEntry',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                instance.hideStatus = 1
+                instance.save()
+
+                response = {'code': 1, 'message': "Done Successfully"}
+            except IndustryAumEntryModel.DoesNotExist:
+                response = {'code': 0, 'message': "Industry AUM Entry not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1767,15 +2080,50 @@ class GstEntryViewSet(viewsets.ModelViewSet):
     def processing(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
+            data = request.data.copy()
+
             if pk == "0":
-                serializer = GstEntryModelSerializers(data=request.data)
+                # Create operation
+                serializer = GstEntryModelSerializers(data=data)
+                if serializer.is_valid():
+                    instance = serializer.save()
+
+                    # Log the create activity
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='CREATE',
+                        entity_type='GstEntry',
+                        entity_id=instance.id,
+                        details={'new_data': serializer.data}
+                    )
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
             else:
-                serializer = GstEntryModelSerializers(instance=GstEntryModel.objects.get(id=pk), data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                # Update operation
+                try:
+                    instance = GstEntryModel.objects.get(id=pk)
+                    # Capture previous data before update
+                    previous_data = self.get_previous_data(instance)
+
+                    serializer = GstEntryModelSerializers(instance=instance, data=data)
+                    if serializer.is_valid():
+                        # Log the update before saving
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='GstEntry',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+                        # Save the updated instance
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
+                except GstEntryModel.DoesNotExist:
+                    response = {'code': 0, 'message': "GST Entry not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1784,8 +2132,27 @@ class GstEntryViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            GstEntryModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                instance = GstEntryModel.objects.get(id=pk)
+                # Capture previous data before deletion
+                previous_data = self.get_previous_data(instance)
+
+                # Log the deletion with the captured data
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='GstEntry',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                instance.hideStatus = 1
+                instance.save()
+
+                response = {'code': 1, 'message': "Done Successfully"}
+            except GstEntryModel.DoesNotExist:
+                response = {'code': 0, 'message': "GST Entry not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -1903,7 +2270,7 @@ class IssueViewSet(viewsets.ModelViewSet):
                     estimated_days=issue_type.estimatedIssueDay
                 )
 
-                # Create IssueModel without creating DailyEntry
+                # Create IssueModel
                 issue = IssueModel.objects.create(
                     issueClientName=client,
                     issueType=issue_type,
@@ -1913,10 +2280,21 @@ class IssueViewSet(viewsets.ModelViewSet):
                     hideStatus=0
                 )
 
+                # Log the create action
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='CREATE',
+                    entity_type='Issue',
+                    entity_id=issue.id,
+                    details={'new_data': data}
+                )
+
                 message = 'Issue created successfully'
             else:  # Update existing issue
                 issue = IssueModel.objects.get(id=pk)
                 issue_resolution_date = datetime.strptime(data['issueResolutionDate'], '%Y-%m-%d').date()
+
+                previous_data = self.get_previous_data(issue)
 
                 # Update IssueModel
                 issue.issueClientName = client
@@ -1926,7 +2304,17 @@ class IssueViewSet(viewsets.ModelViewSet):
                 issue.issueDescription = data['issueDescription']
                 issue.save()
 
-                # Only update associated DailyEntryModel if it exists
+                # Log the update action
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='UPDATE',
+                    entity_type='Issue',
+                    entity_id=pk,
+                    details={'new_data': data},
+                    previous_data=previous_data
+                )
+
+                # If there's an associated DailyEntryModel, update it
                 if issue.issueDailyEntry:
                     daily_entry = issue.issueDailyEntry
                     daily_entry.dailyEntryIssueType = issue_type
@@ -1956,25 +2344,34 @@ class IssueViewSet(viewsets.ModelViewSet):
             try:
                 # Get the issue instance
                 issue = IssueModel.objects.get(id=pk)
+                previous_data = self.get_previous_data(issue)
 
-                # Update the issue's hideStatus
+                # Update the issue's hideStatus (soft delete)
                 issue.hideStatus = 1
                 issue.save()
 
-                # If there's an associated daily entry, update it
+                # Log the delete action
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='Issue',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # If there's an associated DailyEntryModel, update it
                 if issue.issueDailyEntry:
                     daily_entry = issue.issueDailyEntry
                     daily_entry.dailyEntryIssueType = None
                     daily_entry.save()
 
-                # Delete dailyEntryIssueType for all related DailyEntryModel instances
+                # Update DailyEntryModel instances related to the issue
                 DailyEntryModel.objects.filter(dailyEntryIssueType=issue.issueType).update(dailyEntryIssueType=None)
 
                 return Response({'code': 1, 'message': "Issue deleted successfully, daily entries updated"})
             except IssueModel.DoesNotExist:
                 return Response({'code': 0, 'message': "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
             except Exception as e:
-                # Rollback the transaction in case of any error
                 transaction.set_rollback(True)
                 return Response({'code': 0, 'message': f"An error occurred: {str(e)}"},
                                 status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -2065,30 +2462,77 @@ class StatementViewSet(viewsets.ModelViewSet):
             return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
     @action(detail=True, methods=['POST'])
+    @transaction.atomic
     def processing(self, request, pk=None):
         user = request.user
-        if user.is_authenticated:
-            if pk == "0":
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': 'Token is invalid'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            if pk == "0":  # Creating a new statement
                 serializer = StatementModelSerializers(data=request.data)
-            else:
-                serializer = StatementModelSerializers(instance=StatementModel.objects.get(id=pk), data=request.data)
+            else:  # Updating an existing statement
+                statement = StatementModel.objects.get(id=pk)
+                previous_data = self.get_previous_data(statement)
+                serializer = StatementModelSerializers(instance=statement, data=request.data)
+
             if serializer.is_valid():
-                serializer.save()
+                statement = serializer.save()
+
+                # Log the activity based on creation or update
+                action_type = 'CREATE' if pk == "0" else 'UPDATE'
+                ActivityLogger.log_activity(
+                    request=request,
+                    action=action_type,
+                    entity_type='Statement',
+                    entity_id=statement.id,
+                    details={'new_data': request.data},
+                    previous_data=previous_data if pk != "0" else None
+                )
+
                 response = {'code': 1, 'message': "Done Successfully"}
             else:
                 response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
+        except StatementModel.DoesNotExist:
+            return Response({'code': 0, 'message': 'Statement not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            transaction.set_rollback(True)
+            return Response({'code': 0, 'message': f'An error occurred: {str(e)}'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         return Response(response)
 
     @action(detail=True, methods=['GET'])
+    @transaction.atomic
     def deletion(self, request, pk=None):
         user = request.user
-        if user.is_authenticated:
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': 'Token is invalid'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            statement = StatementModel.objects.get(id=pk)
+            previous_data = self.get_previous_data(statement)
+
+            # Soft delete the statement (update hideStatus to 1)
             StatementModel.objects.filter(id=pk).update(hideStatus=1)
+
+            # Log the delete action
+            ActivityLogger.log_activity(
+                request=request,
+                action='DELETE',
+                entity_type='Statement',
+                entity_id=pk,
+                previous_data=previous_data
+            )
+
             response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
+        except StatementModel.DoesNotExist:
+            return Response({'code': 0, 'message': 'Statement not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            transaction.set_rollback(True)
+            return Response({'code': 0, 'message': f'An error occurred: {str(e)}'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         return Response(response)
 
 
@@ -2180,12 +2624,43 @@ class CourierViewSet(viewsets.ModelViewSet):
                 with transaction.atomic():
                     if pk == "0":
                         serializer = CourierModelSerializers(data=request.data)
+                        action_type = 'CREATE'
+                        previous_data = None
                     else:
                         instance = CourierModel.objects.get(id=pk)
+                        previous_data = self.get_previous_data(instance)
                         serializer = CourierModelSerializers(instance=instance, data=request.data, partial=True)
+                        action_type = 'UPDATE'
 
                     if serializer.is_valid():
-                        serializer.save()
+                        instance = serializer.save()
+
+                        # Create a clean version of request.data for logging
+                        clean_data = {
+                            key: value for key, value in request.data.items()
+                            if key != 'courierFile'  # Exclude the file from the log
+                        }
+
+                        if 'courierFile' in request.FILES:
+                            files_info = []
+                            for file in request.FILES.getlist('courierFile'):
+                                files_info.append({
+                                    'filename': file.name,
+                                    'size': file.size,
+                                    'content_type': file.content_type
+                                })
+                            clean_data['courierFile'] = files_info
+
+                        # Log activity with clean data
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action=action_type,
+                            entity_type='Courier',
+                            entity_id=instance.id,
+                            details={'new_data': clean_data},
+                            previous_data=previous_data
+                        )
+
                         response = {'code': 1, 'message': "Done Successfully"}
                     else:
                         response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
@@ -2202,8 +2677,23 @@ class CourierViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            CourierModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                instance = CourierModel.objects.get(id=pk)
+                previous_data = self.get_previous_data(instance)
+                CourierModel.objects.filter(id=pk).update(hideStatus=1)
+
+                # Log delete activity
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='Courier',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                response = {'code': 1, 'message': "Done Successfully"}
+            except CourierModel.DoesNotExist:
+                response = {'code': 0, 'message': "Courier not found"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -2252,7 +2742,8 @@ class FormsViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
+        serializer = self.get_serializer(instance, context={'request': self.request})
+        return serializer.data
 
     @action(detail=False, methods=['GET'])
     def listing(self, request):
@@ -2330,26 +2821,77 @@ class FormsViewSet(viewsets.ModelViewSet):
         user = request.user
         if user.is_authenticated:
             if pk == "0":
+                # Create operation
                 serializer = FormsModelSerializers(data=request.data)
+                if serializer.is_valid():
+                    instance = serializer.save()
+                    # Log the create activity
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='CREATE',
+                        entity_type='Forms',
+                        entity_id=instance.id,
+                        details={'new_data': serializer.data}
+                    )
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    print("Serializer errors:", serializer.errors)
+                    response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
             else:
-                instance = FormsModel.objects.get(id=pk)
-                serializer = FormsModelSerializers(instance=instance, data=request.data, partial=True)
+                # Update operation
+                try:
+                    instance = FormsModel.objects.get(id=pk)
+                    # Capture previous data before update
+                    previous_data = self.get_previous_data(instance)
 
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request", "error": serializer.errors}
+                    serializer = FormsModelSerializers(instance=instance, data=request.data, partial=True)
+                    if serializer.is_valid():
+                        # Log before saving the changes
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='Forms',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+                        # Save the changes
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        print("Serializer errors:", serializer.errors)
+                        response = {'code': 0, 'message': "Unable to Process Request", 'error': serializer.errors}
+                except FormsModel.DoesNotExist:
+                    response = {'code': 0, 'message': "Form not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response, status=status.HTTP_200_OK)
+        return Response(response)
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            FormsModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                instance = FormsModel.objects.get(id=pk)
+                # Capture previous data before deletion
+                previous_data = self.get_previous_data(instance)
+
+                # Log the deletion with the captured data
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='Forms',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                instance.hideStatus = 1
+                instance.save()
+
+                response = {'code': 1, 'message': "Done Successfully"}
+            except FormsModel.DoesNotExist:
+                response = {'code': 0, 'message': "Form not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -2442,16 +2984,45 @@ class MarketingViewSet(viewsets.ModelViewSet):
         user = request.user
         if user.is_authenticated:
             if pk == "0":
+                # Create operation
                 serializer = MarketingModelSerializers(data=request.data)
+                if serializer.is_valid():
+                    instance = serializer.save()
+                    # Log the create activity
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='CREATE',
+                        entity_type='Marketing',
+                        entity_id=instance.id,
+                        details={'new_data': serializer.data}
+                    )
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
             else:
-                instance = MarketingModel.objects.get(id=pk)
-                serializer = MarketingModelSerializers(instance=instance, data=request.data, partial=True)
+                # Update operation
+                try:
+                    instance = MarketingModel.objects.get(id=pk)
+                    # Capture previous data before update
+                    previous_data = self.get_previous_data(instance)
 
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
+                    serializer = MarketingModelSerializers(instance=instance, data=request.data, partial=True)
+                    if serializer.is_valid():
+                        # Log before saving the changes
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='Marketing',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
+                except MarketingModel.DoesNotExist:
+                    response = {'code': 0, 'message': "Marketing material not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response, status=status.HTTP_200_OK)
@@ -2460,8 +3031,27 @@ class MarketingViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            MarketingModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                instance = MarketingModel.objects.get(id=pk)
+                # Capture previous data before deletion
+                previous_data = self.get_previous_data(instance)
+
+                # Log the deletion with the captured data
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='Marketing',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                instance.hideStatus = 1
+                instance.save()
+
+                response = {'code': 1, 'message': "Done Successfully"}
+            except MarketingModel.DoesNotExist:
+                response = {'code': 0, 'message': "Marketing material not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -2586,24 +3176,71 @@ class TaskViewSet(viewsets.ModelViewSet):
         user = request.user
         if user.is_authenticated:
             if pk == "0":
+                # Creating a new task
                 serializer = TaskModelSerializers(data=request.data)
+                if serializer.is_valid():
+                    instance = serializer.save()
+                    # Log creation activity
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='CREATE',
+                        entity_type='Task',
+                        entity_id=instance.id,
+                        details={'new_data': serializer.data}
+                    )
+                    response = {'code': 1, 'message': "Done Successfully"}
+                else:
+                    response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
             else:
-                serializer = TaskModelSerializers(instance=TaskModel.objects.get(id=pk), data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
+                # Updating an existing task
+                try:
+                    instance = TaskModel.objects.get(id=pk)
+                    previous_data = self.get_previous_data(instance)
+
+                    serializer = TaskModelSerializers(instance=instance, data=request.data, partial=True)
+                    if serializer.is_valid():
+                        # Log update activity
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='Task',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+                        serializer.save()
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
+                except TaskModel.DoesNotExist:
+                    response = {'code': 0, 'message': "Task not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
+        return Response(response, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            TaskModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                instance = TaskModel.objects.get(id=pk)
+                previous_data = self.get_previous_data(instance)
+
+                # Log the deletion activity
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='Task',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                instance.hideStatus = 1
+                instance.save()
+                response = {'code': 1, 'message': "Done Successfully"}
+            except TaskModel.DoesNotExist:
+                response = {'code': 0, 'message': "Task not found"}, 404
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -2638,6 +3275,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         user = request.user
         if user.is_authenticated:
             if pk == "0":
+                # Creating a new employee
                 serializer = EmployeeModelSerializers(data=request.data)
                 if serializer.is_valid():
                     # Save new instance first
@@ -2648,30 +3286,53 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                     if raw_password:
                         employee_instance.set_password(raw_password)
                         employee_instance.save()  # Save updated instance with hashed password
+
+                    # Log creation activity
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='CREATE',
+                        entity_type='Employee',
+                        entity_id=employee_instance.id,
+                        details={'new_data': serializer.data}
+                    )
+
                     response = {'code': 1, 'message': "Done Successfully"}
                 else:
                     response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
             else:
+                # Updating an existing employee
                 try:
                     employee_instance = EmployeeModel.objects.get(id=pk)
+                    previous_data = self.get_previous_data(employee_instance)
+
+                    serializer = EmployeeModelSerializers(instance=employee_instance, data=request.data, partial=True)
+                    if serializer.is_valid():
+                        serializer.save()  # Save instance first
+
+                        # Hash the password if provided
+                        raw_password = request.data.get('employeePassword', None)
+                        if raw_password:
+                            employee_instance.set_password(raw_password)
+                            employee_instance.save()  # Save updated instance with hashed password
+
+                        # Log update activity
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='UPDATE',
+                            entity_type='Employee',
+                            entity_id=pk,
+                            details={'new_data': serializer.validated_data},
+                            previous_data=previous_data
+                        )
+
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    else:
+                        response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
                 except EmployeeModel.DoesNotExist:
                     return Response({'code': 0, 'message': "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
-
-                serializer = EmployeeModelSerializers(instance=employee_instance, data=request.data, partial=True)
-                if serializer.is_valid():
-                    serializer.save()  # Save instance first
-
-                    # Hash the password if provided
-                    raw_password = request.data.get('employeePassword', None)
-                    if raw_password:
-                        employee_instance.set_password(raw_password)
-                        employee_instance.save()  # Save updated instance with hashed password
-                    response = {'code': 1, 'message': "Done Successfully"}
-                else:
-                    response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
+        return Response(response, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['POST'])
     def update_password(self, request, pk=None):
@@ -2681,8 +3342,21 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                 employee = EmployeeModel.objects.get(id=pk)
                 new_password = request.data.get('newPassword')
                 if new_password:
+                    previous_data = self.get_previous_data(employee)
+
                     employee.set_password(new_password)
                     employee.save()
+
+                    # Log password update activity
+                    ActivityLogger.log_activity(
+                        request=request,
+                        action='UPDATE_PASSWORD',
+                        entity_type='Employee',
+                        entity_id=pk,
+                        details={'new_password': True},
+                        previous_data=previous_data
+                    )
+
                     return Response({'code': 1, 'message': "Password updated successfully"})
                 else:
                     return Response({'code': 0, 'message': "New password is required"},
@@ -2696,8 +3370,25 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     def deletion(self, request, pk=None):
         user = request.user
         if user.is_authenticated:
-            EmployeeModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
+            try:
+                employee_instance = EmployeeModel.objects.get(id=pk)
+                previous_data = self.get_previous_data(employee_instance)
+
+                # Log the deletion activity
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='Employee',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                employee_instance.hideStatus = 1
+                employee_instance.save()
+                response = {'code': 1, 'message': "Done Successfully"}
+            except EmployeeModel.DoesNotExist:
+                return Response({'code': 0, 'message': "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -3104,709 +3795,6 @@ class ClientViewSet(viewsets.ModelViewSet):
             return Response({'code': 0, 'message': f"An error occurred: {str(e)}"}, status=500)
 
 
-class ClientFamilyDetailViewSet(viewsets.ModelViewSet):
-    queryset = ClientFamilyDetailModel.objects.filter(hideStatus=0)
-    serializer_class = ClientFamilyDetailModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientFamilyDetailModelSerializers(
-                    ClientFamilyDetailModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = ClientFamilyDetailModelSerializers(
-                    ClientFamilyDetailModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientFamilyDetailModelSerializers(data=request.data)
-            else:
-                serializer = ClientFamilyDetailModelSerializers(instance=ClientFamilyDetailModel.objects.get(id=pk),
-                                                                data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientFamilyDetailModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
-class ClientChildrenDetailViewSet(viewsets.ModelViewSet):
-    queryset = ClientChildrenDetailModel.objects.filter(hideStatus=0)
-    serializer_class = ClientChildrenDetailModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientChildrenDetailModelSerializers(
-                    ClientChildrenDetailModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = ClientChildrenDetailModelSerializers(
-                    ClientChildrenDetailModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientChildrenDetailModelSerializers(data=request.data)
-            else:
-                serializer = ClientChildrenDetailModelSerializers(instance=ClientChildrenDetailModel.objects.get(id=pk),
-                                                                  data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientChildrenDetailModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
-class ClientPresentAddressViewSet(viewsets.ModelViewSet):
-    queryset = ClientPresentAddressModel.objects.filter(hideStatus=0)
-    serializer_class = ClientPresentAddressModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientPresentAddressModelSerializers(
-                    ClientPresentAddressModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = ClientPresentAddressModelSerializers(
-                    ClientPresentAddressModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientPresentAddressModelSerializers(data=request.data)
-            else:
-                serializer = ClientPresentAddressModelSerializers(instance=ClientPresentAddressModel.objects.get(id=pk),
-                                                                  data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientPresentAddressModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
-class ClientPermanentAddressViewSet(viewsets.ModelViewSet):
-    queryset = ClientPermanentAddressModel.objects.filter(hideStatus=0)
-    serializer_class = ClientPermanentAddressModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientPermanentAddressModelSerializers(
-                    ClientPermanentAddressModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = ClientPermanentAddressModelSerializers(
-                    ClientPermanentAddressModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientPermanentAddressModelSerializers(data=request.data)
-            else:
-                serializer = ClientPermanentAddressModelSerializers(
-                    instance=ClientPermanentAddressModel.objects.get(id=pk), data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientPermanentAddressModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
-class ClientOfficeAddressViewSet(viewsets.ModelViewSet):
-    queryset = ClientOfficeAddressModel.objects.filter(hideStatus=0)
-    serializer_class = ClientOfficeAddressModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientOfficeAddressModelSerializers(
-                    ClientOfficeAddressModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = ClientOfficeAddressModelSerializers(
-                    ClientOfficeAddressModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientOfficeAddressModelSerializers(data=request.data)
-            else:
-                serializer = ClientOfficeAddressModelSerializers(instance=ClientOfficeAddressModel.objects.get(id=pk),
-                                                                 data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientOfficeAddressModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
-class ClientOverseasAddressViewSet(viewsets.ModelViewSet):
-    queryset = ClientOverseasAddressModel.objects.filter(hideStatus=0)
-    serializer_class = ClientOverseasAddressModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientOverseasAddressModelSerializers(
-                    ClientOverseasAddressModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = ClientOverseasAddressModelSerializers(
-                    ClientOverseasAddressModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientOverseasAddressModelSerializers(data=request.data)
-            else:
-                serializer = ClientOverseasAddressModelSerializers(
-                    instance=ClientOverseasAddressModel.objects.get(id=pk), data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientOverseasAddressModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
-class ClientNomineeViewSet(viewsets.ModelViewSet):
-    queryset = ClientNomineeModel.objects.filter(hideStatus=0)
-    serializer_class = ClientNomineeModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientNomineeModelSerializers(
-                    ClientNomineeModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = ClientNomineeModelSerializers(
-                    ClientNomineeModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientNomineeModelSerializers(data=request.data)
-            else:
-                serializer = ClientNomineeModelSerializers(instance=ClientNomineeModel.objects.get(id=pk),
-                                                           data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientNomineeModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
-class ClientMedicalInsuranceViewSet(viewsets.ModelViewSet):
-    queryset = ClientMedicalInsuranceModel.objects.filter(hideStatus=0)
-    serializer_class = ClientMedicalInsuranceModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientMedicalInsuranceModelSerializers(
-                    ClientMedicalInsuranceModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = ClientMedicalInsuranceModelSerializers(
-                    ClientMedicalInsuranceModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientMedicalInsuranceModelSerializers(data=request.data)
-            else:
-                serializer = ClientMedicalInsuranceModelSerializers(
-                    instance=ClientMedicalInsuranceModel.objects.get(id=pk), data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientMedicalInsuranceModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
-class ClientTermInsuranceViewSet(viewsets.ModelViewSet):
-    queryset = ClientTermInsuranceModel.objects.filter(hideStatus=0)
-    serializer_class = ClientTermInsuranceModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientTermInsuranceModelSerializers(
-                    ClientTermInsuranceModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = ClientTermInsuranceModelSerializers(
-                    ClientTermInsuranceModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientTermInsuranceModelSerializers(data=request.data)
-            else:
-                serializer = ClientTermInsuranceModelSerializers(instance=ClientTermInsuranceModel.objects.get(id=pk),
-                                                                 data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientTermInsuranceModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
-class ClientUploadFileViewSet(viewsets.ModelViewSet):
-    queryset = ClientUploadFileModel.objects.filter(hideStatus=0)
-    serializer_class = ClientUploadFileModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientUploadFileModelSerializers(
-                    ClientUploadFileModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = ClientUploadFileModelSerializers(
-                    ClientUploadFileModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientUploadFileModelSerializers(data=request.data)
-            else:
-                serializer = ClientUploadFileModelSerializers(instance=ClientUploadFileModel.objects.get(id=pk),
-                                                              data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientUploadFileModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
-class ClientBankViewSet(viewsets.ModelViewSet):
-    queryset = ClientBankModel.objects.filter(hideStatus=0)
-    serializer_class = ClientBankModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientBankModelSerializers(ClientBankModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                        many=True)
-            else:
-                serializer = ClientBankModelSerializers(
-                    ClientBankModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientBankModelSerializers(data=request.data)
-            else:
-                serializer = ClientBankModelSerializers(instance=ClientBankModel.objects.get(id=pk), data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientBankModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
-class ClientTaxViewSet(viewsets.ModelViewSet):
-    queryset = ClientTaxModel.objects.filter(hideStatus=0)
-    serializer_class = ClientTaxModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientTaxModelSerializers(ClientTaxModel.objects.filter(hideStatus=0).order_by('-id'),
-                                                       many=True)
-            else:
-                serializer = ClientTaxModelSerializers(
-                    ClientTaxModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientTaxModelSerializers(data=request.data)
-            else:
-                serializer = ClientTaxModelSerializers(instance=ClientTaxModel.objects.get(id=pk), data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientTaxModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
-class ClientPowerOfAttorneyViewSet(viewsets.ModelViewSet):
-    queryset = ClientPowerOfAttorneyModel.objects.filter(hideStatus=0)
-    serializer_class = ClientPowerOfAttorneyModelSerializers
-    permission_classes = [IsAuthenticated]
-
-    def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
-
-    @action(detail=True, methods=['GET'])
-    def listing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientPowerOfAttorneyModelSerializers(
-                    ClientPowerOfAttorneyModel.objects.filter(hideStatus=0).order_by('-id'),
-                    many=True)
-            else:
-                serializer = ClientPowerOfAttorneyModelSerializers(
-                    ClientPowerOfAttorneyModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
-                    many=True)
-            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
-        else:
-            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['POST'])
-    def processing(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                serializer = ClientPowerOfAttorneyModelSerializers(data=request.data)
-            else:
-                instance = ClientPowerOfAttorneyModel.objects.get(id=pk)
-                serializer = ClientPowerOfAttorneyModelSerializers(instance=instance, data=request.data)
-
-            if serializer.is_valid():
-                if 'clientPowerOfAttorneyUpload' in request.FILES:
-                    file = request.FILES['clientPowerOfAttorneyUpload']
-                    serializer.validated_data['clientPowerOfAttorneyUpload'] = file
-
-                serializer.save()
-                response = {'code': 1, 'message': "Done Successfully"}
-            else:
-                response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            ClientPowerOfAttorneyModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
-
-
 class NavViewSet(viewsets.ModelViewSet):
     queryset = NavModel.objects.filter(hideStatus=0).order_by('-id')
     serializer_class = NavModelSerializers
@@ -3906,19 +3894,38 @@ class NavViewSet(viewsets.ModelViewSet):
                 fund.fundAmcName = amc
                 fund.save()
 
-            # Create or update NAV entry
             if pk == "0":
+                # Create new NAV entry
                 nav_entry = NavModel.objects.create(
                     navFundName=fund,
                     nav=nav,
                     navDate=nav_date
                 )
+                # Log the create activity
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='CREATE',
+                    entity_type='NavEntry',
+                    entity_id=nav_entry.id,
+                    details={'new_data': NavModelSerializers(nav_entry).data}
+                )
             else:
+                # Update existing NAV entry
                 nav_entry = NavModel.objects.get(id=pk)
+                previous_data = self.get_previous_data(nav_entry)  # Capture previous data
                 nav_entry.navFundName = fund
                 nav_entry.nav = nav
                 nav_entry.navDate = nav_date
                 nav_entry.save()
+                # Log the update activity
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='UPDATE',
+                    entity_type='NavEntry',
+                    entity_id=pk,
+                    details={'new_data': NavModelSerializers(nav_entry).data},
+                    previous_data=previous_data
+                )
 
             serializer = self.get_serializer(nav_entry)
             return Response({'code': 1, 'data': serializer.data, 'message': "Done Successfully"})
@@ -3927,6 +3934,35 @@ class NavViewSet(viewsets.ModelViewSet):
             return Response({'code': 0, 'message': str(e)}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             return Response({'code': 0, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['GET'])
+    def deletion(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            try:
+                nav_entry = NavModel.objects.get(id=pk)
+                # Capture previous data before deletion
+                previous_data = self.get_previous_data(nav_entry)
+
+                # Log the deletion with the captured data
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='NavEntry',
+                    entity_id=pk,
+                    previous_data=previous_data
+                )
+
+                # Soft delete the instance
+                nav_entry.hideStatus = 1
+                nav_entry.save()
+
+                response = {'code': 1, 'message': "Done Successfully"}
+            except NavModel.DoesNotExist:
+                response = {'code': 0, 'message': "NAV entry not found"}, 404
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
 
     @action(detail=False, methods=['POST'])
     def fetch(self, request):
@@ -3963,16 +3999,6 @@ class NavViewSet(viewsets.ModelViewSet):
                 'code': 0,
                 'message': "Token is invalid"
             }, status=status.HTTP_401_UNAUTHORIZED)
-
-    @action(detail=True, methods=['GET'])
-    def deletion(self, request, pk=None):
-        user = request.user
-        if user.is_authenticated:
-            NavModel.objects.filter(id=pk).update(hideStatus=1)
-            response = {'code': 1, 'message': "Done Successfully"}
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response)
 
     @action(detail=True, methods=['GET'])
     def get_nav_update_data(self, request, pk=None):
