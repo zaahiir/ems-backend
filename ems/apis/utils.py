@@ -1,14 +1,14 @@
+#utils.py
+
 from django.contrib.auth import get_user_model
 from django.forms import model_to_dict
 from django.utils.timezone import now
-from django.core import serializers
 from django.db.models import Model
 from decimal import Decimal
 from rest_framework_simplejwt.tokens import RefreshToken
 from ipware import get_client_ip
 from .models import ActivityLog
 import datetime
-import json
 
 User = get_user_model()
 
@@ -29,6 +29,7 @@ def get_tokens_for_user(user_data):
 
 
 class ActivityLogger:
+
     @staticmethod
     def serialize_date(obj):
         if isinstance(obj, (datetime.date, datetime.datetime)):
@@ -188,6 +189,7 @@ class ActivityLogger:
             action=action,
             entity_type='Authentication'
         )
+
 
 def get_client_info(request):
     """Extract client information from request"""
