@@ -3,7 +3,6 @@ import traceback
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.serializers.json import DjangoJSONEncoder
-from django.forms.models import model_to_dict
 from django.db import transaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -17,12 +16,12 @@ import urllib.parse
 from .serializers import *
 from django.http import JsonResponse
 from datetime import datetime, timedelta, date
-from decimal import Decimal
 from .utils import get_tokens_for_user, ActivityLogger
 from django.core.management import call_command
 from django.db.models import Q
 from django.core.paginator import Paginator
 import json
+from django.core.files.storage import default_storage
 
 logger = logging.getLogger(__name__)
 
@@ -2905,6 +2904,18 @@ class MarketingViewSet(viewsets.ModelViewSet):
     def get_previous_data(self, instance):
         return self.get_serializer(instance).data
 
+    def handle_file_upload(self, file, old_file=None):
+        """Handle file upload and cleanup old file if exists"""
+        if old_file:
+            try:
+                # Get the relative path from the full URL
+                old_path = old_file.split('/media/')[-1]
+                if default_storage.exists(old_path):
+                    default_storage.delete(old_path)
+            except Exception as e:
+                print(f"Error deleting old file: {str(e)}")
+        return file
+
     @action(detail=False, methods=['GET'])
     def listing(self, request):
         user = request.user
@@ -2982,33 +2993,80 @@ class MarketingViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
         user = request.user
-        if user.is_authenticated:
-            if pk == "0":
-                # Create operation
-                serializer = MarketingModelSerializers(data=request.data)
-                if serializer.is_valid():
-                    instance = serializer.save()
-                    # Log the create activity
-                    ActivityLogger.log_activity(
-                        request=request,
-                        action='CREATE',
-                        entity_type='Marketing',
-                        entity_id=instance.id,
-                        details={'new_data': serializer.data}
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"},
+                            status=status.HTTP_401_UNAUTHORIZED)
+
+        try:
+            with transaction.atomic():
+                if pk == "0":
+                    # Create operation
+                    if not request.FILES.get('marketingFile'):
+                        return Response(
+                            {'code': 0, 'message': "Marketing file is required"},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
+                    # Prepare data for serializer
+                    data = {
+                        'marketingAmcName': request.data.get('marketingAmcName'),
+                        'marketingType': request.data.get('marketingType'),
+                        'marketingDescription': request.data.get('marketingDescription'),
+                        'marketingFile': request.FILES['marketingFile'],
+                        'hideStatus': request.data.get('hideStatus', '0')
+                    }
+
+                    serializer = self.get_serializer(data=data)
+                    if serializer.is_valid():
+                        instance = serializer.save()
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='CREATE',
+                            entity_type='Marketing',
+                            entity_id=instance.id,
+                            details={'new_data': serializer.data}
+                        )
+                        return Response({'code': 1, 'message': "Created Successfully"})
+                    return Response(
+                        {'code': 0, 'message': "Validation Error", 'errors': serializer.errors},
+                        status=status.HTTP_400_BAD_REQUEST
                     )
-                    response = {'code': 1, 'message': "Done Successfully"}
                 else:
-                    response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
-            else:
-                # Update operation
-                try:
-                    instance = MarketingModel.objects.get(id=pk)
-                    # Capture previous data before update
+                    # Update operation
+                    try:
+                        instance = self.get_queryset().get(id=pk)
+                    except MarketingModel.DoesNotExist:
+                        return Response(
+                            {'code': 0, 'message': "Marketing material not found"},
+                            status=status.HTTP_404_NOT_FOUND
+                        )
+
                     previous_data = self.get_previous_data(instance)
 
-                    serializer = MarketingModelSerializers(instance=instance, data=request.data, partial=True)
+                    # Prepare update data
+                    update_data = {
+                        'marketingAmcName': request.data.get('marketingAmcName'),
+                        'marketingType': request.data.get('marketingType'),
+                        'marketingDescription': request.data.get('marketingDescription'),
+                        'hideStatus': request.data.get('hideStatus', instance.hideStatus)
+                    }
+
+                    # Handle file update if new file is provided
+                    if request.FILES.get('marketingFile'):
+                        old_file = instance.marketingFile.url if instance.marketingFile else None
+                        update_data['marketingFile'] = self.handle_file_upload(
+                            request.FILES['marketingFile'],
+                            old_file
+                        )
+
+                    serializer = self.get_serializer(
+                        instance=instance,
+                        data=update_data,
+                        partial=True
+                    )
+
                     if serializer.is_valid():
-                        # Log before saving the changes
+                        instance = serializer.save()
                         ActivityLogger.log_activity(
                             request=request,
                             action='UPDATE',
@@ -3017,15 +3075,17 @@ class MarketingViewSet(viewsets.ModelViewSet):
                             details={'new_data': serializer.validated_data},
                             previous_data=previous_data
                         )
-                        serializer.save()
-                        response = {'code': 1, 'message': "Done Successfully"}
-                    else:
-                        response = {'code': 0, 'message': "Unable to Process Request", 'errors': serializer.errors}
-                except MarketingModel.DoesNotExist:
-                    response = {'code': 0, 'message': "Marketing material not found"}, 404
-        else:
-            response = {'code': 0, 'message': "Token is invalid"}
-        return Response(response, status=status.HTTP_200_OK)
+                        return Response({'code': 1, 'message': "Updated Successfully"})
+                    return Response(
+                        {'code': 0, 'message': "Validation Error", 'errors': serializer.errors},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+        except Exception as e:
+            return Response(
+                {'code': 0, 'message': f"Processing Error: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
