@@ -3464,7 +3464,8 @@ class ClientViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['GET'])
     def listing(self, request):
-        if not request.user.is_authenticated:
+        user = request.user
+        if not user.is_authenticated:
             return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
 
         page_size = int(request.query_params.get('page_size', 10))
@@ -3472,6 +3473,7 @@ class ClientViewSet(viewsets.ModelViewSet):
         search = request.query_params.get('search', '')
 
         queryset = self.get_queryset()
+
         if search:
             queryset = queryset.filter(
                 Q(clientName__icontains=search) |
@@ -3481,349 +3483,372 @@ class ClientViewSet(viewsets.ModelViewSet):
 
         total_count = queryset.count()
         total_pages = (total_count + page_size - 1) // page_size
-        start = (page - 1) * page_size
-        queryset = queryset.order_by('-id')[start:start + page_size]
 
-        return Response({
+        start = (page - 1) * page_size
+        end = start + page_size
+
+        queryset = queryset.order_by('-id')[start:end]
+
+        serializer = self.get_serializer(queryset, many=True)
+
+        data = {
             'code': 1,
-            'data': self.get_serializer(queryset, many=True).data,
+            'data': serializer.data,
             'message': "Retrieved Successfully",
             'total_count': total_count,
             'total_pages': total_pages,
             'current_page': page
-        })
+        }
+
+        return Response(data)
 
     @action(detail=False, methods=['GET'])
     def total_count(self, request):
         search = request.query_params.get('search', '')
         queryset = self.get_queryset()
+
         if search:
             queryset = queryset.filter(
                 Q(clientName__icontains=search) |
                 Q(clientEmail__icontains=search) |
                 Q(clientPhone__icontains=search)
             )
-        return Response({'total_count': queryset.count()})
+
+        total_count = queryset.count()
+        return Response({'total_count': total_count})
 
     @action(detail=True, methods=['GET'])
     def list_for_update(self, request, pk=None):
-        if not request.user.is_authenticated:
+        user = request.user
+        if user.is_authenticated:
+            try:
+                instance = ClientModel.objects.get(id=pk)
+                serializer = ClientModelSerializers(instance)
+                return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
+            except ClientModel.DoesNotExist:
+                return Response({'code': 0, 'message': "NAV not found"}, status=404)
+        else:
             return Response({'code': 0, 'message': "Token is invalid"}, status=401)
-
-        try:
-            instance = ClientModel.objects.get(id=pk)
-            return Response({
-                'code': 1,
-                'data': self.get_serializer(instance).data,
-                'message': "Retrieved Successfully"
-            })
-        except ClientModel.DoesNotExist:
-            return Response({'code': 0, 'message': "NAV not found"}, status=404)
 
     @action(detail=False, methods=['GET'])
     def countries(self, request):
-        countries = CountryModel.objects.filter(hideStatus=0).values(
-            'id', 'countryCode', 'countryName', 'dailCode'
-        )
-        return Response([{
-            "id": country['id'],
-            "code": country['countryCode'],
-            "name": country['countryName'],
-            "dial_code": country['dailCode']
-        } for country in countries])
+        countries = CountryModel.objects.filter(hideStatus=0).values('id', 'countryCode', 'countryName', 'dailCode')
+        country_data = [
+            {
+                "id": country['id'],
+                "code": country['countryCode'],
+                "name": country['countryName'],
+                "dial_code": country['dailCode']
+            }
+            for country in countries
+        ]
+        return Response(country_data)
 
     @action(detail=True, methods=['GET'])
     def listing_client(self, request, pk=None):
-        if not request.user.is_authenticated:
-            return Response({'code': 0, 'data': [], 'message': "Token is invalid"},
-                            status=status.HTTP_401_UNAUTHORIZED)
+        user = request.user
+        if user.is_authenticated:
+            try:
+                client = ClientModelSerializers(ClientModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
+                                                many=True)
+                client_family = ClientFamilyDetailModelSerializers(
+                    ClientFamilyDetailModel.objects.filter(hideStatus=0, clientFamilyDetailId=pk).order_by('-id'),
+                    many=True)
+                client_children = ClientChildrenDetailModelSerializers(
+                    ClientChildrenDetailModel.objects.filter(hideStatus=0, clientChildrenId=pk).order_by('-id'),
+                    many=True)
+                client_present_address = ClientPresentAddressModelSerializers(
+                    ClientPresentAddressModel.objects.filter(hideStatus=0, clientPresentAddressId=pk).order_by('-id'),
+                    many=True)
+                client_permanent_address = ClientPermanentAddressModelSerializers(
+                    ClientPermanentAddressModel.objects.filter(hideStatus=0, clientPermanentAddressId=pk).order_by(
+                        '-id'), many=True)
+                client_office_address = ClientOfficeAddressModelSerializers(
+                    ClientOfficeAddressModel.objects.filter(hideStatus=0, clientOfficeAddressId=pk).order_by('-id'),
+                    many=True)
+                client_overseas_address = ClientOverseasAddressModelSerializers(
+                    ClientOverseasAddressModel.objects.filter(hideStatus=0, clientOverseasAddressId=pk).order_by('-id'),
+                    many=True)
+                client_nominee = ClientNomineeModelSerializers(
+                    ClientNomineeModel.objects.filter(hideStatus=0, clientNomineeId=pk).order_by('-id'), many=True)
+                client_insurance = ClientInsuranceModelSerializers(
+                    ClientInsuranceModel.objects.filter(hideStatus=0, clientInsuranceId=pk).order_by('-id'), many=True)
+                client_medical_insurance = ClientMedicalInsuranceModelSerializers(
+                    ClientMedicalInsuranceModel.objects.filter(hideStatus=0, clientMedicalInsuranceId=pk).order_by(
+                        '-id'), many=True)
+                client_term_insurance = ClientTermInsuranceModelSerializers(
+                    ClientTermInsuranceModel.objects.filter(hideStatus=0, clientTermInsuranceId=pk).order_by('-id'),
+                    many=True)
+                client_upload_files = ClientUploadFileModelSerializers(
+                    ClientUploadFileModel.objects.filter(hideStatus=0, clientUploadFileId=pk).order_by('-id'),
+                    many=True)
+                client_bank = ClientBankModelSerializers(
+                    ClientBankModel.objects.filter(hideStatus=0, clientBankId=pk).order_by('-id'), many=True)
+                client_tax = ClientTaxModelSerializers(
+                    ClientTaxModel.objects.filter(hideStatus=0, clientTaxId=pk).order_by('-id'), many=True)
+                client_attorney = ClientPowerOfAttorneyModelSerializers(
+                    ClientPowerOfAttorneyModel.objects.filter(hideStatus=0, clientPowerOfAttorneyId=pk).order_by('-id'),
+                    many=True)
+                client_guardian = ClientGuardianModelSerializers(
+                    ClientGuardianModel.objects.filter(hideStatus=0, clientGuardianId=pk).order_by('-id'),
+                    many=True)
 
-        try:
-            combined_data = {
-                "client": ClientModelSerializers(
-                    ClientModel.objects.filter(hideStatus=0, id=pk), many=True).data,
-                "family": ClientFamilyDetailModelSerializers(
-                    ClientFamilyDetailModel.objects.filter(hideStatus=0, clientFamilyDetailId=pk), many=True).data,
-                "children": ClientChildrenDetailModelSerializers(
-                    ClientChildrenDetailModel.objects.filter(hideStatus=0, clientChildrenId=pk), many=True).data,
-                "present_address": ClientPresentAddressModelSerializers(
-                    ClientPresentAddressModel.objects.filter(hideStatus=0, clientPresentAddressId=pk), many=True).data,
-                "permanent_address": ClientPermanentAddressModelSerializers(
-                    ClientPermanentAddressModel.objects.filter(hideStatus=0, clientPermanentAddressId=pk),
-                    many=True).data,
-                "office_address": ClientOfficeAddressModelSerializers(
-                    ClientOfficeAddressModel.objects.filter(hideStatus=0, clientOfficeAddressId=pk), many=True).data,
-                "overseas_address": ClientOverseasAddressModelSerializers(
-                    ClientOverseasAddressModel.objects.filter(hideStatus=0, clientOverseasAddressId=pk),
-                    many=True).data,
-                "nominee": ClientNomineeModelSerializers(
-                    ClientNomineeModel.objects.filter(hideStatus=0, clientNomineeId=pk), many=True).data,
-                "insurance": ClientInsuranceModelSerializers(
-                    ClientInsuranceModel.objects.filter(hideStatus=0, clientInsuranceId=pk), many=True).data,
-                "medical_insurance": ClientMedicalInsuranceModelSerializers(
-                    ClientMedicalInsuranceModel.objects.filter(hideStatus=0, clientMedicalInsuranceId=pk),
-                    many=True).data,
-                "term_insurance": ClientTermInsuranceModelSerializers(
-                    ClientTermInsuranceModel.objects.filter(hideStatus=0, clientTermInsuranceId=pk), many=True).data,
-                "upload_files": ClientUploadFileModelSerializers(
-                    ClientUploadFileModel.objects.filter(hideStatus=0, clientUploadFileId=pk), many=True).data,
-                "bank": ClientBankModelSerializers(
-                    ClientBankModel.objects.filter(hideStatus=0, clientBankId=pk), many=True).data,
-                "tax": ClientTaxModelSerializers(
-                    ClientTaxModel.objects.filter(hideStatus=0, clientTaxId=pk), many=True).data,
-                "attorney": ClientPowerOfAttorneyModelSerializers(
-                    ClientPowerOfAttorneyModel.objects.filter(hideStatus=0, clientPowerOfAttorneyId=pk),
-                    many=True).data,
-                "guardian": ClientGuardianModelSerializers(
-                    ClientGuardianModel.objects.filter(hideStatus=0, clientGuardianId=pk), many=True).data,
-            }
-            return JsonResponse({'code': 1, 'data': combined_data, 'message': "All Retrieved"},
-                                encoder=CustomJSONEncoder)
-        except Exception as e:
-            return Response({
-                'code': 0,
-                'message': "An error occurred while retrieving client data",
-                'error': str(e),
-                'stack_trace': traceback.format_exc()
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                combined_serializer = {
+                    "client": client.data,
+                    "family": client_family.data,
+                    "children": client_children.data,
+                    "present_address": client_present_address.data,
+                    "permanent_address": client_permanent_address.data,
+                    "office_address": client_office_address.data,
+                    "overseas_address": client_overseas_address.data,
+                    "nominee": client_nominee.data,
+                    "insurance": client_insurance.data,
+                    "medical_insurance": client_medical_insurance.data,
+                    "term_insurance": client_term_insurance.data,
+                    "upload_files": client_upload_files.data,
+                    "bank": client_bank.data,
+                    "tax": client_tax.data,
+                    "attorney": client_attorney.data,
+                    "guardian": client_guardian.data,
+                }
+                return JsonResponse({'code': 1, 'data': combined_serializer, 'message': "All Retrieved"},
+                                    encoder=CustomJSONEncoder)
+            except Exception as e:
+                error_message = str(e)
+                stack_trace = traceback.format_exc()
+                return Response({
+                    'code': 0,
+                    'message': "An error occurred while retrieving client data",
+                    'error': error_message,
+                    'stack_trace': stack_trace
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            return Response({'code': 0, 'data': [], 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
 
     @action(detail=True, methods=['POST'])
     @transaction.atomic
     def processing(self, request, pk=None):
-        if not request.user.is_authenticated:
-            return Response({'code': 0, 'message': "Authentication token missing"},
-                            status=status.HTTP_401_UNAUTHORIZED)
-        try:
-            with transaction.atomic():
-                # Process main client data
-                client_data = request.data.get('clientJson', {})
-                if pk == "0":
-                    client_serializer = ClientModelSerializers(data=client_data)
-                else:
-                    client_instance = ClientModel.objects.get(id=pk)
-                    client_serializer = ClientModelSerializers(instance=client_instance, data=client_data)
+        user = request.user
+        if user.is_authenticated:
+            try:
+                with transaction.atomic():
+                    # Process main client data
+                    client_data = request.data.get('clientJson', {})
+                    if pk == "0":
+                        client_serializer = ClientModelSerializers(data=client_data)
+                    else:
+                        client_instance = ClientModel.objects.get(id=pk)
+                        client_serializer = ClientModelSerializers(instance=client_instance, data=client_data)
+                    if client_serializer.is_valid():
+                        client_instance = client_serializer.save()
+                    else:
+                        logger.error(f"Client serializer errors: {client_serializer.errors}")
+                        return Response(
+                            {'code': 0, 'message': "Invalid client data", 'errors': client_serializer.errors})
 
-                if not client_serializer.is_valid():
-                    return Response({'code': 0, 'message': "Invalid client data",
-                                     'errors': client_serializer.errors})
-                client_instance = client_serializer.save()
+                    # Process family details
+                    family_data = request.data.get('familyJson', {})
+                    family_instance, created = ClientFamilyDetailModel.objects.get_or_create(
+                        clientFamilyDetailId=client_instance)
+                    family_serializer = ClientFamilyDetailModelSerializers(instance=family_instance, data=family_data)
+                    if family_serializer.is_valid():
+                        family_serializer.save()
+                    else:
+                        return Response(
+                            {'code': 0, 'message': "Invalid family data", 'errors': family_serializer.errors})
 
-                # Process family details
-                family_data = request.data.get('familyJson', {})
-                family_instance, _ = ClientFamilyDetailModel.objects.get_or_create(
-                    clientFamilyDetailId=client_instance)
-                family_serializer = ClientFamilyDetailModelSerializers(
-                    instance=family_instance, data=family_data)
-                if not family_serializer.is_valid():
-                    return Response({'code': 0, 'message': "Invalid family data",
-                                     'errors': family_serializer.errors})
-                family_serializer.save()
+                    # Process children
+                    children_data = request.data.get('childrenJson', [])
+                    existing_children = ClientChildrenDetailModel.objects.filter(clientChildrenId=client_instance)
+                    existing_children_ids = set(existing_children.values_list('id', flat=True))
 
-                # Process children
-                self._process_children(request.data.get('childrenJson', []), client_instance)
+                    processed_children_ids = set()
 
-                # Process addresses
-                self._process_addresses(request.data, client_instance)
+                    for child_data in children_data:
+                        child_id = child_data.get('id')
+                        if child_id:
+                            child_instance = existing_children.filter(id=child_id).first()
+                            if child_instance:
+                                child_serializer = ClientChildrenDetailModelSerializers(instance=child_instance,
+                                                                                        data=child_data)
+                                processed_children_ids.add(child_id)
+                            else:
+                                child_serializer = ClientChildrenDetailModelSerializers(data=child_data)
+                        else:
+                            child_serializer = ClientChildrenDetailModelSerializers(data=child_data)
 
-                # Process nominees
-                self._process_nominees(request.data.get('nomineeJson', []), client_instance)
+                        if child_serializer.is_valid():
+                            child_serializer.save(clientChildrenId=client_instance)
+                        else:
+                            return Response(
+                                {'code': 0, 'message': "Invalid child data", 'errors': child_serializer.errors})
 
-                # Process insurance policies
-                self._process_insurance(request.data, client_instance)
+                    # Delete children that were not in the submitted data
+                    children_to_delete = existing_children_ids - processed_children_ids
+                    ClientChildrenDetailModel.objects.filter(id__in=children_to_delete).delete()
 
-                # Process file uploads
-                self._process_uploads(request.data.get('uploadFilesJson', {}), client_instance)
+                    # Process addresses
+                    addresses_types = [
+                        ('presentAddressJson', ClientPresentAddressModelSerializers, 'clientPresentAddressId'),
+                        ('permanentAddressJson', ClientPermanentAddressModelSerializers, 'clientPermanentAddressId'),
+                        ('officeAddressJson', ClientOfficeAddressModelSerializers, 'clientOfficeAddressId'),
+                        ('overseasAddressJson', ClientOverseasAddressModelSerializers, 'clientOverseasAddressId'),
+                    ]
+                    for address_key, serializer_class, client_field in addresses_types:
+                        address_data = request.data.get(address_key, {})
+                        logger.debug(f"Processing {address_key}: {address_data}")
+                        if address_data:
+                            address_instance, created = serializer_class.Meta.model.objects.get_or_create(
+                                **{client_field: client_instance})
+                            address_serializer = serializer_class(instance=address_instance, data=address_data)
+                            if address_serializer.is_valid():
+                                address_serializer.save(**{client_field: client_instance})
+                            else:
+                                logger.error(f"Invalid {address_key} data: {address_serializer.errors}")
+                                return Response({'code': 0, 'message': f"Invalid {address_key} data",
+                                                 'errors': address_serializer.errors})
 
-                # Process bank details
-                self._process_bank_details(request.data.get('bankJson', []), client_instance)
+                    # Process nominees
+                    nominee_data = request.data.get('nomineeJson', [])
+                    ClientNomineeModel.objects.filter(clientNomineeId=client_instance).delete()
+                    for nominee in nominee_data:
+                        nominee_serializer = ClientNomineeModelSerializers(data=nominee)
+                        if nominee_serializer.is_valid():
+                            nominee_serializer.save(clientNomineeId=client_instance)
+                        else:
+                            return Response(
+                                {'code': 0, 'message': "Invalid nominee data", 'errors': nominee_serializer.errors})
 
-                # Process tax details
-                tax_data = request.data.get('taxJson', {})
-                tax_instance, _ = ClientTaxModel.objects.get_or_create(clientTaxId=client_instance)
-                tax_serializer = ClientTaxModelSerializers(instance=tax_instance, data=tax_data)
-                if not tax_serializer.is_valid():
-                    return Response({'code': 0, 'message': "Invalid tax data",
-                                     'errors': tax_serializer.errors})
-                tax_serializer.save(clientTaxId=client_instance)
+                    # Process insurance policies
+                    insurance_types = [
+                        ('insuranceJson', ClientInsuranceModelSerializers, 'clientInsuranceId'),
+                        ('medicalInsuranceJson', ClientMedicalInsuranceModelSerializers, 'clientMedicalInsuranceId'),
+                        ('termInsuranceJson', ClientTermInsuranceModelSerializers, 'clientTermInsuranceId'),
+                    ]
+                    for insurance_key, serializer_class, client_field in insurance_types:
+                        insurance_data = request.data.get(insurance_key, [])
 
-                # Process guardian details
-                guardian_data = request.data.get('guardianJSON', {})
-                guardian_instance, _ = ClientGuardianModel.objects.get_or_create(
-                    clientGuardianId=client_instance)
-                guardian_serializer = ClientGuardianModelSerializers(
-                    instance=guardian_instance, data=guardian_data)
-                if not guardian_serializer.is_valid():
-                    return Response({'code': 0, 'message': "Invalid guardian data",
-                                     'errors': guardian_serializer.errors})
-                guardian_serializer.save(clientGuardianId=client_instance)
+                        # Delete existing records
+                        serializer_class.Meta.model.objects.filter(**{client_field: client_instance}).delete()
 
-                # Process attorney details
-                attorney_data = request.data.get('attorneyJson', {})
-                attorney_instance, _ = ClientPowerOfAttorneyModel.objects.get_or_create(
-                    clientPowerOfAttorneyId=client_instance)
-                attorney_serializer = ClientPowerOfAttorneyModelSerializers(
-                    instance=attorney_instance, data=attorney_data)
-                if not attorney_serializer.is_valid():
-                    return Response({'code': 0, 'message': "Invalid attorney data",
-                                     'errors': attorney_serializer.errors},
-                                    status=status.HTTP_400_BAD_REQUEST)
-                attorney_serializer.save(clientPowerOfAttorneyId=client_instance)
+                        # Create new records
+                        for policy in insurance_data:
+                            policy[client_field] = client_instance.id
+                            policy_serializer = serializer_class(data=policy)
+                            if policy_serializer.is_valid():
+                                policy_serializer.save()
+                            else:
+                                return Response({'code': 0, 'message': f"Invalid {insurance_key} data",
+                                                 'errors': policy_serializer.errors})
 
-            return Response({'code': 1, 'message': "Client data processed successfully"},
-                            status=status.HTTP_200_OK)
+                    # Process file uploads
+                    upload_files_data = request.data.get('uploadFilesJson', {})
+                    file_instance, created = ClientUploadFileModel.objects.get_or_create(
+                        clientUploadFileId=client_instance)
+                    if upload_files_data:
+                        for field_name, file_data in upload_files_data.items():
+                            if file_data:
+                                if isinstance(file_data, str) and file_data.startswith('data:'):
+                                    format, imgstr = file_data.split(';base64,')
+                                    ext = format.split('/')[-1]
+                                    data = ContentFile(base64.b64decode(imgstr), name=f'{field_name}.{ext}')
+                                elif isinstance(file_data,
+                                                dict) and 'name' in file_data and 'content' in file_data:
+                                    ext = file_data['name'].split('.')[-1]
+                                    data = ContentFile(base64.b64decode(file_data['content']),
+                                                       name=file_data['name'])
+                                else:
+                                    logger.warning(
+                                        f"Unexpected file data format for {field_name}: {type(file_data)}")
+                                    continue
+                                setattr(file_instance, field_name, data)
+                        file_instance.save()
 
-        except Exception as e:
-            return Response({'code': 0, 'message': f"An error occurred while processing the data: {str(e)}"},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    # Process bank details
+                    bank_data = request.data.get('bankJson', [])
+                    ClientBankModel.objects.filter(clientBankId=client_instance).delete()
+                    for bank in bank_data:
+                        bank_serializer = ClientBankModelSerializers(data=bank)
+                        if bank_serializer.is_valid():
+                            bank_serializer.save(clientBankId=client_instance)
+                        else:
+                            return Response(
+                                {'code': 0, 'message': "Invalid bank data", 'errors': bank_serializer.errors})
 
-    def _process_children(self, children_data, client_instance):
-        existing_children = ClientChildrenDetailModel.objects.filter(clientChildrenId=client_instance)
-        existing_children_ids = set(existing_children.values_list('id', flat=True))
-        processed_children_ids = set()
+                    # Process tax details
+                    tax_data = request.data.get('taxJson', {})
+                    tax_instance, created = ClientTaxModel.objects.get_or_create(clientTaxId=client_instance)
+                    tax_serializer = ClientTaxModelSerializers(instance=tax_instance, data=tax_data)
+                    if tax_serializer.is_valid():
+                        tax_serializer.save(clientTaxId=client_instance)
+                    else:
+                        return Response({'code': 0, 'message': "Invalid tax data", 'errors': tax_serializer.errors})
 
-        for child_data in children_data:
-            child_id = child_data.get('id')
-            if child_id:
-                child_instance = existing_children.filter(id=child_id).first()
-                if child_instance:
-                    child_serializer = ClientChildrenDetailModelSerializers(
-                        instance=child_instance, data=child_data)
-                    processed_children_ids.add(child_id)
-                else:
-                    child_serializer = ClientChildrenDetailModelSerializers(data=child_data)
-            else:
-                child_serializer = ClientChildrenDetailModelSerializers(data=child_data)
+                    # Process guardian details
+                    guardian_data = request.data.get('guardianJSON', {})
+                    guardian_instance, created = ClientGuardianModel.objects.get_or_create(
+                        clientGuardianId=client_instance)
+                    guardian_serializer = ClientGuardianModelSerializers(instance=guardian_instance, data=guardian_data)
+                    if guardian_serializer.is_valid():
+                        guardian_serializer.save(clientGuardianId=client_instance)
+                    else:
+                        return Response(
+                            {'code': 0, 'message': "Invalid guardian data", 'errors': guardian_serializer.errors})
 
-            if child_serializer.is_valid():
-                child_serializer.save(clientChildrenId=client_instance)
-            else:
-                raise ValueError(f"Invalid child data: {child_serializer.errors}")
+                    # Process attorney details
+                    attorney_data = request.data.get('attorneyJson', {})
+                    attorney_instance, created = ClientPowerOfAttorneyModel.objects.get_or_create(
+                        clientPowerOfAttorneyId=client_instance)
+                    attorney_serializer = ClientPowerOfAttorneyModelSerializers(instance=attorney_instance,
+                                                                                data=attorney_data)
+                    if attorney_serializer.is_valid():
+                        attorney_serializer.save(clientPowerOfAttorneyId=client_instance)
+                    else:
+                        return Response(
+                            {'code': 0, 'message': "Invalid attorney data", 'errors': attorney_serializer.errors},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        # Delete children that were not in the submitted data
-        ClientChildrenDetailModel.objects.filter(
-            id__in=existing_children_ids - processed_children_ids).delete()
-
-    def _process_addresses(self, data, client_instance):
-        address_types = [
-            ('presentAddressJson', ClientPresentAddressModelSerializers, 'clientPresentAddressId'),
-            ('permanentAddressJson', ClientPermanentAddressModelSerializers, 'clientPermanentAddressId'),
-            ('officeAddressJson', ClientOfficeAddressModelSerializers, 'clientOfficeAddressId'),
-            ('overseasAddressJson', ClientOverseasAddressModelSerializers, 'clientOverseasAddressId'),
-        ]
-
-        for address_key, serializer_class, client_field in address_types:
-            address_data = data.get(address_key, {})
-            if address_data:
-                address_instance, _ = serializer_class.Meta.model.objects.get_or_create(
-                    **{client_field: client_instance})
-                address_serializer = serializer_class(instance=address_instance, data=address_data)
-                if not address_serializer.is_valid():
-                    raise ValueError(f"Invalid {address_key} data: {address_serializer.errors}")
-                address_serializer.save(**{client_field: client_instance})
-
-    def _process_nominees(self, nominee_data, client_instance):
-        ClientNomineeModel.objects.filter(clientNomineeId=client_instance).delete()
-        for nominee in nominee_data:
-            nominee_serializer = ClientNomineeModelSerializers(data=nominee)
-            if nominee_serializer.is_valid():
-                nominee_serializer.save(clientNomineeId=client_instance)
-            else:
-                raise ValueError(f"Invalid nominee data: {nominee_serializer.errors}")
-
-    def _process_insurance(self, data, client_instance):
-        insurance_types = [
-            ('insuranceJson', ClientInsuranceModelSerializers, 'clientInsuranceId'),
-            ('medicalInsuranceJson', ClientMedicalInsuranceModelSerializers, 'clientMedicalInsuranceId'),
-            ('termInsuranceJson', ClientTermInsuranceModelSerializers, 'clientTermInsuranceId'),
-        ]
-
-        for insurance_key, serializer_class, client_field in insurance_types:
-            insurance_data = data.get(insurance_key, [])
-            # Delete existing records
-            serializer_class.Meta.model.objects.filter(**{client_field: client_instance}).delete()
-
-            # Create new records
-            for policy in insurance_data:
-                policy[client_field] = client_instance.id
-                policy_serializer = serializer_class(data=policy)
-                if not policy_serializer.is_valid():
-                    raise ValueError(f"Invalid {insurance_key} data: {policy_serializer.errors}")
-                policy_serializer.save()
-
-    def _process_uploads(self, upload_files_data, client_instance):
-        if not upload_files_data:
-            return
-
-        file_instance, _ = ClientUploadFileModel.objects.get_or_create(
-            clientUploadFileId=client_instance)
-
-        for field_name, file_data in upload_files_data.items():
-            if not file_data:
-                continue
-
-            if isinstance(file_data, str) and file_data.startswith('data:'):
-                format, imgstr = file_data.split(';base64,')
-                ext = format.split('/')[-1]
-                data = ContentFile(base64.b64decode(imgstr), name=f'{field_name}.{ext}')
-            elif isinstance(file_data, dict) and 'name' in file_data and 'content' in file_data:
-                ext = file_data['name'].split('.')[-1]
-                data = ContentFile(base64.b64decode(file_data['content']),
-                                   name=file_data['name'])
-            else:
-                continue
-
-            setattr(file_instance, field_name, data)
-
-        file_instance.save()
-
-    def _process_bank_details(self, bank_data, client_instance):
-        ClientBankModel.objects.filter(clientBankId=client_instance).delete()
-        for bank in bank_data:
-            bank_serializer = ClientBankModelSerializers(data=bank)
-            if bank_serializer.is_valid():
-                bank_serializer.save(clientBankId=client_instance)
-            else:
-                raise ValueError(f"Invalid bank data: {bank_serializer.errors}")
+                return Response({'code': 1, 'message': "Client data processed successfully"},
+                                status=status.HTTP_200_OK)
+            except Exception as e:
+                logger.error(f"Error processing client data: {e}")
+                return Response({'code': 0, 'message': "An error occurred while processing the data"},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            return Response({'code': 0, 'message': "Authentication token missing"}, status=status.HTTP_401_UNAUTHORIZED)
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
-        if not request.user.is_authenticated:
-            return Response({'code': 0, 'message': "Unauthorized access"}, status=401)
-
         try:
+            user = request.user
+            if not user.is_authenticated:
+                return Response({'code': 0, 'message': "Unauthorized access"}, status=401)
+
             with transaction.atomic():
                 client = ClientModel.objects.get(id=pk)
 
-                # Update hideStatus for the main client and all related models
-                models_to_update = [
-                    client,
-                    ClientFamilyDetailModel.objects.filter(clientFamilyDetailId=client),
-                    ClientChildrenDetailModel.objects.filter(clientChildrenId=client),
-                    ClientPresentAddressModel.objects.filter(clientPresentAddressId=client),
-                    ClientPermanentAddressModel.objects.filter(clientPermanentAddressId=client),
-                    ClientOfficeAddressModel.objects.filter(clientOfficeAddressId=client),
-                    ClientOverseasAddressModel.objects.filter(clientOverseasAddressId=client),
-                    ClientNomineeModel.objects.filter(clientNomineeId=client),
-                    ClientInsuranceModel.objects.filter(clientInsuranceId=client),
-                    ClientMedicalInsuranceModel.objects.filter(clientMedicalInsuranceId=client),
-                    ClientTermInsuranceModel.objects.filter(clientTermInsuranceId=client),
-                    ClientUploadFileModel.objects.filter(clientUploadFileId=client),
-                    ClientBankModel.objects.filter(clientBankId=client),
-                    ClientTaxModel.objects.filter(clientTaxId=client),
-                    ClientPowerOfAttorneyModel.objects.filter(clientPowerOfAttorneyId=client),
-                    ClientGuardianModel.objects.filter(clientGuardianId=client)
-                ]
-
-                # Update main client
+                # Update hideStatus for the main client
                 client.hideStatus = '1'
                 client.save()
 
-                # Update related models
-                for queryset in models_to_update[1:]:
-                    queryset.update(hideStatus='1')
+                # Update hideStatus for related models
+                ClientFamilyDetailModel.objects.filter(clientFamilyDetailId=client).update(hideStatus='1')
+                ClientChildrenDetailModel.objects.filter(clientChildrenId=client).update(hideStatus='1')
+                ClientPresentAddressModel.objects.filter(clientPresentAddressId=client).update(hideStatus='1')
+                ClientPermanentAddressModel.objects.filter(clientPermanentAddressId=client).update(hideStatus='1')
+                ClientOfficeAddressModel.objects.filter(clientOfficeAddressId=client).update(hideStatus='1')
+                ClientOverseasAddressModel.objects.filter(clientOverseasAddressId=client).update(hideStatus='1')
+                ClientNomineeModel.objects.filter(clientNomineeId=client).update(hideStatus='1')
+                ClientInsuranceModel.objects.filter(clientInsuranceId=client).update(hideStatus='1')
+                ClientMedicalInsuranceModel.objects.filter(clientMedicalInsuranceId=client).update(hideStatus='1')
+                ClientTermInsuranceModel.objects.filter(clientTermInsuranceId=client).update(hideStatus='1')
+                ClientUploadFileModel.objects.filter(clientUploadFileId=client).update(hideStatus='1')
+                ClientBankModel.objects.filter(clientBankId=client).update(hideStatus='1')
+                ClientTaxModel.objects.filter(clientTaxId=client).update(hideStatus='1')
+                ClientPowerOfAttorneyModel.objects.filter(clientPowerOfAttorneyId=client).update(hideStatus='1')
+                ClientGuardianModel.objects.filter(clientGuardianId=client).update(hideStatus='1')
 
             return Response({'code': 1, 'message': "Client and all related data hidden successfully"})
-
         except ClientModel.DoesNotExist:
             return Response({'code': 0, 'message': "Client not found"}, status=404)
         except Exception as e:
