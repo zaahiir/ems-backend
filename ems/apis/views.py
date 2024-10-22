@@ -3819,40 +3819,167 @@ class ClientViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['GET'])
     def deletion(self, request, pk=None):
+        """
+        Soft delete a client and all related data by setting hideStatus to '1'
+        """
         try:
             user = request.user
             if not user.is_authenticated:
                 return Response({'code': 0, 'message': "Unauthorized access"}, status=401)
 
             with transaction.atomic():
-                client = ClientModel.objects.get(id=pk)
+                try:
+                    client = ClientModel.objects.get(id=pk)
+                except ClientModel.DoesNotExist:
+                    return Response({'code': 0, 'message': "Client not found"}, status=404)
 
-                # Update hideStatus for the main client
-                client.hideStatus = '1'
-                client.save()
+                # Store data before deletion for activity log
+                previous_data = self._gather_previous_data(client)
 
-                # Update hideStatus for related models
-                ClientFamilyDetailModel.objects.filter(clientFamilyDetailId=client).update(hideStatus='1')
-                ClientChildrenDetailModel.objects.filter(clientChildrenId=client).update(hideStatus='1')
-                ClientPresentAddressModel.objects.filter(clientPresentAddressId=client).update(hideStatus='1')
-                ClientPermanentAddressModel.objects.filter(clientPermanentAddressId=client).update(hideStatus='1')
-                ClientOfficeAddressModel.objects.filter(clientOfficeAddressId=client).update(hideStatus='1')
-                ClientOverseasAddressModel.objects.filter(clientOverseasAddressId=client).update(hideStatus='1')
-                ClientNomineeModel.objects.filter(clientNomineeId=client).update(hideStatus='1')
-                ClientInsuranceModel.objects.filter(clientInsuranceId=client).update(hideStatus='1')
-                ClientMedicalInsuranceModel.objects.filter(clientMedicalInsuranceId=client).update(hideStatus='1')
-                ClientTermInsuranceModel.objects.filter(clientTermInsuranceId=client).update(hideStatus='1')
-                ClientUploadFileModel.objects.filter(clientUploadFileId=client).update(hideStatus='1')
-                ClientBankModel.objects.filter(clientBankId=client).update(hideStatus='1')
-                ClientTaxModel.objects.filter(clientTaxId=client).update(hideStatus='1')
-                ClientPowerOfAttorneyModel.objects.filter(clientPowerOfAttorneyId=client).update(hideStatus='1')
-                ClientGuardianModel.objects.filter(clientGuardianId=client).update(hideStatus='1')
+                # Perform soft deletion by updating hideStatus
+                self._perform_soft_deletion(client)
 
-            return Response({'code': 1, 'message': "Client and all related data hidden successfully"})
-        except ClientModel.DoesNotExist:
-            return Response({'code': 0, 'message': "Client not found"}, status=404)
+                # Log the deletion activity
+                ActivityLogger.log_activity(
+                    request=request,
+                    action='DELETE',
+                    entity_type='Client',
+                    entity_id=client.id,
+                    details={'status_change': 'Hidden'},
+                    instance=client,
+                    previous_data=previous_data
+                )
+
+                return Response({
+                    'code': 1,
+                    'message': "Client and all related data hidden successfully"
+                })
+
         except Exception as e:
-            return Response({'code': 0, 'message': f"An error occurred: {str(e)}"}, status=500)
+            import traceback
+            return Response({
+                'code': 0,
+                'message': f"An error occurred: {str(e)}",
+                'trace': traceback.format_exc()
+            }, status=500)
+
+    def _gather_previous_data(self, client):
+        """
+        Gather all related data for the client before deletion
+        """
+
+        def get_single_instance_data(model, filter_kwargs, serializer_class):
+            instance = model.objects.filter(**filter_kwargs).first()
+            return serializer_class(instance).data if instance else None
+
+        def get_multiple_instances_data(model, filter_kwargs, serializer_class):
+            instances = model.objects.filter(**filter_kwargs)
+            return serializer_class(instances, many=True).data if instances.exists() else []
+
+        return {
+            'client': ClientModelSerializers(client).data,
+            'family': get_single_instance_data(
+                ClientFamilyDetailModel,
+                {'clientFamilyDetailId': client},
+                ClientFamilyDetailModelSerializers
+            ),
+            'children': get_multiple_instances_data(
+                ClientChildrenDetailModel,
+                {'clientChildrenId': client},
+                ClientChildrenDetailModelSerializers
+            ),
+            'present_address': get_single_instance_data(
+                ClientPresentAddressModel,
+                {'clientPresentAddressId': client},
+                ClientPresentAddressModelSerializers
+            ),
+            'permanent_address': get_single_instance_data(
+                ClientPermanentAddressModel,
+                {'clientPermanentAddressId': client},
+                ClientPermanentAddressModelSerializers
+            ),
+            'office_address': get_single_instance_data(
+                ClientOfficeAddressModel,
+                {'clientOfficeAddressId': client},
+                ClientOfficeAddressModelSerializers
+            ),
+            'overseas_address': get_single_instance_data(
+                ClientOverseasAddressModel,
+                {'clientOverseasAddressId': client},
+                ClientOverseasAddressModelSerializers
+            ),
+            'nominee': get_multiple_instances_data(
+                ClientNomineeModel,
+                {'clientNomineeId': client},
+                ClientNomineeModelSerializers
+            ),
+            'insurance': get_multiple_instances_data(
+                ClientInsuranceModel,
+                {'clientInsuranceId': client},
+                ClientInsuranceModelSerializers
+            ),
+            'medical_insurance': get_multiple_instances_data(
+                ClientMedicalInsuranceModel,
+                {'clientMedicalInsuranceId': client},
+                ClientMedicalInsuranceModelSerializers
+            ),
+            'term_insurance': get_multiple_instances_data(
+                ClientTermInsuranceModel,
+                {'clientTermInsuranceId': client},
+                ClientTermInsuranceModelSerializers
+            ),
+            'bank': get_multiple_instances_data(
+                ClientBankModel,
+                {'clientBankId': client},
+                ClientBankModelSerializers
+            ),
+            'tax': get_single_instance_data(
+                ClientTaxModel,
+                {'clientTaxId': client},
+                ClientTaxModelSerializers
+            ),
+            'attorney': get_single_instance_data(
+                ClientPowerOfAttorneyModel,
+                {'clientPowerOfAttorneyId': client},
+                ClientPowerOfAttorneyModelSerializers
+            ),
+            'guardian': get_single_instance_data(
+                ClientGuardianModel,
+                {'clientGuardianId': client},
+                ClientGuardianModelSerializers
+            )
+        }
+
+    def _perform_soft_deletion(self, client):
+        """
+        Perform soft deletion by setting hideStatus to '1' for client and all related records
+        """
+        # Update hideStatus for the main client
+        client.hideStatus = '1'
+        client.save()
+
+        # List of models and their foreign key fields to update
+        related_models = [
+            (ClientFamilyDetailModel, 'clientFamilyDetailId'),
+            (ClientChildrenDetailModel, 'clientChildrenId'),
+            (ClientPresentAddressModel, 'clientPresentAddressId'),
+            (ClientPermanentAddressModel, 'clientPermanentAddressId'),
+            (ClientOfficeAddressModel, 'clientOfficeAddressId'),
+            (ClientOverseasAddressModel, 'clientOverseasAddressId'),
+            (ClientNomineeModel, 'clientNomineeId'),
+            (ClientInsuranceModel, 'clientInsuranceId'),
+            (ClientMedicalInsuranceModel, 'clientMedicalInsuranceId'),
+            (ClientTermInsuranceModel, 'clientTermInsuranceId'),
+            (ClientUploadFileModel, 'clientUploadFileId'),
+            (ClientBankModel, 'clientBankId'),
+            (ClientTaxModel, 'clientTaxId'),
+            (ClientPowerOfAttorneyModel, 'clientPowerOfAttorneyId'),
+            (ClientGuardianModel, 'clientGuardianId')
+        ]
+
+        # Update hideStatus for all related models
+        for model, fk_field in related_models:
+            model.objects.filter(**{fk_field: client}).update(hideStatus='1')
 
 
 class NavViewSet(viewsets.ModelViewSet):
