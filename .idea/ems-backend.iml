@@ -5,8 +5,9 @@
       <sourceFolder url="file://$MODULE_DIR$/ems" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/ems/venv" />
+      <excludeFolder url="file://$MODULE_DIR$/ems/.venv" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.12 (ems-backend)" jdkType="Python SDK" />
+    <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyDocumentationSettings">
