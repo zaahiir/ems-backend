@@ -3312,7 +3312,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_previous_data(self, instance):
-        return self.get_serializer(instance).data
+        return self.get_serializer(instance, context={'request': self.request}).data
 
     @action(detail=True, methods=['GET'])
     def listing(self, request, pk=None):
@@ -3336,7 +3336,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         if user.is_authenticated:
             if pk == "0":
                 # Creating a new employee
-                serializer = EmployeeModelSerializers(data=request.data)
+                serializer = EmployeeModelSerializers(data=request.data, context={'request': request})
                 if serializer.is_valid():
                     # Save new instance first
                     employee_instance = serializer.save()
@@ -3365,7 +3365,12 @@ class EmployeeViewSet(viewsets.ModelViewSet):
                     employee_instance = EmployeeModel.objects.get(id=pk)
                     previous_data = self.get_previous_data(employee_instance)
 
-                    serializer = EmployeeModelSerializers(instance=employee_instance, data=request.data, partial=True)
+                    serializer = EmployeeModelSerializers(
+                        instance=employee_instance,
+                        data=request.data,
+                        partial=True,
+                        context={'request': request}
+                    )
                     if serializer.is_valid():
                         serializer.save()  # Save instance first
 
@@ -4335,6 +4340,42 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
             return Response({'code': 0, 'message': 'Client not found'})
 
     @action(detail=False, methods=['GET'])
+    def client_suggestions(self, request):
+        search_term = request.query_params.get('search', '')
+
+        if not search_term:
+            return Response({
+                'code': 0,
+                'message': 'Search term is required',
+                'data': []
+            })
+
+        # Use a more flexible search across multiple fields
+        clients = ClientModel.objects.filter(
+            Q(clientName__icontains=search_term) |
+            Q(clientPanNo__icontains=search_term) |
+            Q(clientPhone__icontains=search_term)
+        ).filter(hideStatus=0)[:10]  # Limit to 10 results
+
+        suggestions = []
+        for client in clients:
+            suggestion = {
+                'client_name': client.clientName,
+                'client_pan_no': client.clientPanNo,
+                'client_phone': client.clientPhone,
+                'client_phone_dial_code': client.clientPhoneCountryCode.dailCode if client.clientPhoneCountryCode else '',
+                'client_alternate_phone': client.clientAlternatePhone,
+                'client_alternate_phone_dial_code': client.clientAlternatePhoneCountryCode.dailCode if client.clientAlternatePhoneCountryCode else ''
+            }
+            suggestions.append(suggestion)
+
+        return Response({
+            'code': 1,
+            'message': 'Client suggestions retrieved successfully',
+            'data': suggestions
+        })
+
+    @action(detail=False, methods=['GET'])
     def get_funds_by_amc(self, request):
         amc_id = request.query_params.get('amc_id')
         if not amc_id or not amc_id.isdigit():
@@ -4432,18 +4473,13 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
         data = request.data
 
         try:
-            # Validate client phone country code
-            client_phone_country_code = data.get('clientPhoneCountryCode')
-            if not client_phone_country_code:
-                return Response({'code': 0, 'message': "clientPhoneCountryCode is required"})
+            # Retrieve or create country
+            country = CountryModel.objects.filter(dailCode=data.get('clientPhoneCountryCode')).first()
+            if not country:
+                return Response({'code': 0, 'message': f"Country not found"})
 
-            try:
-                country = CountryModel.objects.get(dailCode=client_phone_country_code)
-            except CountryModel.DoesNotExist:
-                return Response({'code': 0, 'message': f"Country with dial code {client_phone_country_code} not found"})
-
-            # Create or update client
-            client, client_created = ClientModel.objects.update_or_create(
+            # Retrieve or create client
+            client, _ = ClientModel.objects.update_or_create(
                 clientPanNo=data['dailyEntryClientPanNumber'],
                 defaults={
                     'clientName': data['dailyEntryClientName'],
@@ -4461,35 +4497,42 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                 except DailyEntryModel.DoesNotExist:
                     return Response({'code': 0, 'message': "Daily entry not found"}, status=404)
 
+            # Determine action type
+            action_type = 'CREATE' if pk == "0" else 'UPDATE'
+
             # Create or get daily entry instance
             if pk == "0":
                 issueDailyEntry = DailyEntryModel()
-                action_type = 'CREATE'
             else:
                 issueDailyEntry = existing_entry
-                action_type = 'UPDATE'
+
+            # Retrieve related models
+            fund_house = AmcEntryModel.objects.get(id=data['dailyEntryFundHouse'])
+            fund_name = FundModel.objects.get(id=data['dailyEntryFundName'])
+            issue_type = IssueTypeModel.objects.get(id=data['dailyEntryIssueType'])
 
             # Update daily entry fields
             issueDailyEntry.dailyEntryClientPanNumber = client
             issueDailyEntry.dailyEntryClientName = client
             issueDailyEntry.dailyEntryClientMobileNumber = client
             issueDailyEntry.dailyEntryClientCountryCode = client
+
+            # Parse dates
             issueDailyEntry.applicationDate = datetime.strptime(data['applicationDate'], '%Y-%m-%d').date()
-            issueDailyEntry.dailyEntryFundHouse = AmcEntryModel.objects.get(id=data['dailyEntryFundHouse'])
-            issueDailyEntry.dailyEntryFundName = FundModel.objects.get(id=data['dailyEntryFundName'])
-            issueDailyEntry.dailyEntryClientFolioNumber = data['clientFolioNumber']
-            issueDailyEntry.dailyEntryAmount = data['amount']
-            issueDailyEntry.dailyEntryClientChequeNumber = data['clientChequeNumber']
             issueDailyEntry.dailyEntrySipDate = datetime.strptime(data['sipDate'], '%Y-%m-%d').date() if data[
                 'sipDate'] else None
+
+            # Set other fields
+            issueDailyEntry.dailyEntryFundHouse = fund_house
+            issueDailyEntry.dailyEntryFundName = fund_name
+            issueDailyEntry.dailyEntryClientFolioNumber = data.get('clientFolioNumber')
+            issueDailyEntry.dailyEntryAmount = data['amount']
+            issueDailyEntry.dailyEntryClientChequeNumber = data.get('clientChequeNumber')
+            issueDailyEntry.dailyEntryIssueType = issue_type
             issueDailyEntry.dailyEntryStaffName = data['staffName']
-            issueDailyEntry.dailyEntryTransactionAddDetails = data.get('transactionAddDetail', '')
+            issueDailyEntry.dailyEntryTransactionAddDetails = data['transactionAddDetail']
 
-            # Update issue type if changed
-            new_issue_type = IssueTypeModel.objects.get(id=data['dailyEntryIssueType'])
-            if issueDailyEntry.dailyEntryIssueType is None or issueDailyEntry.dailyEntryIssueType != new_issue_type:
-                issueDailyEntry.dailyEntryIssueType = new_issue_type
-
+            # Save daily entry
             issueDailyEntry.save()
 
             # Calculate issue resolution date
@@ -4499,19 +4542,19 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
             )
 
             # Create or update associated issue
-            issue, issue_created = IssueModel.objects.update_or_create(
+            issue, _ = IssueModel.objects.update_or_create(
                 issueDailyEntry=issueDailyEntry,
                 defaults={
                     'issueClientName': client,
                     'issueType': issueDailyEntry.dailyEntryIssueType,
                     'issueDate': issueDailyEntry.applicationDate,
                     'issueResolutionDate': issue_resolution_date,
-                    'issueDescription': data.get('transactionAddDetail', ''),
+                    'issueDescription': data['transactionAddDetail'],
                     'hideStatus': 0
                 }
             )
 
-            # Log activity
+            # Prepare activity log details
             activity_details = {
                 'new_data': {
                     'client_info': {
@@ -4531,9 +4574,10 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                         'description': issue.issueDescription
                     }
                 },
-                'transaction_type': 'create' if pk == "0" else 'update'
+                'transaction_type': action_type.lower()
             }
 
+            # Log activity
             ActivityLogger.log_activity(
                 request=request,
                 action=action_type,
@@ -4551,6 +4595,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
             })
 
         except Exception as e:
+            # Rollback the transaction and return error
             transaction.set_rollback(True)
             return Response({
                 'code': 0,
