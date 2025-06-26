@@ -42,6 +42,12 @@ class FormTypeModelSerializers(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class TranscationModeModelSerializers(serializers.ModelSerializer):
+    class Meta:
+        model = TranscationModeModel
+        fields = '__all__'
+
+
 class GstTypeModelSerializers(serializers.ModelSerializer):
     class Meta:
         model = GstTypeModel
@@ -555,9 +561,8 @@ class DailyEntryModelSerializers(serializers.ModelSerializer):
     dailyEntryFundName = serializers.SerializerMethodField()
     dailyEntryIssueType = serializers.SerializerMethodField()
     dailyEntryClientCountryCode = serializers.SerializerMethodField()
-
-    # dailyEntryClientCountryName = serializers.SerializerMethodField()
-    # dailyEntryClientCountryDialCode = serializers.SerializerMethodField()
+    dailyEntryTranscationMode = serializers.SerializerMethodField()
+    dailyEntryFundHouse = serializers.SerializerMethodField()
 
     class Meta:
         model = DailyEntryModel
@@ -583,15 +588,11 @@ class DailyEntryModelSerializers(serializers.ModelSerializer):
             return obj.dailyEntryClientCountryCode.clientPhoneCountryCode.dailCode
         return None
 
-    # def get_dailyEntryClientCountryName(self, obj):
-    #     if obj.dailyEntryClientCountryCode and obj.dailyEntryClientCountryCode.clientPhoneCountryCode:
-    #         return obj.dailyEntryClientCountryCode.clientPhoneCountryCode.countryName
-    #     return None
-    #
-    # def get_dailyEntryClientCountryDialCode(self, obj):
-    #     if obj.dailyEntryClientCountryCode and obj.dailyEntryClientCountryCode.clientPhoneCountryCode:
-    #         return obj.dailyEntryClientCountryCode.clientPhoneCountryCode.dailCode
-    #     return None
+    def get_dailyEntryTranscationMode(self, obj):
+        return obj.dailyEntryTranscationMode.transcationModeName if obj.dailyEntryTranscationMode else None
+
+    def get_dailyEntryFundHouse(self, obj):
+        return obj.dailyEntryFundHouse.amcName if obj.dailyEntryFundHouse else None
 
 
 class ActivityLogSerializer(serializers.ModelSerializer):

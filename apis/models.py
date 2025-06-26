@@ -81,6 +81,14 @@ class FormTypeModel(models.Model):
     updatedAt = models.DateTimeField(auto_now=True)
 
 
+class TranscationModeModel(models.Model):
+    id = models.AutoField(primary_key=True)
+    transcationModeName = models.CharField(max_length=200, null=True, blank=True)
+    hideStatus = models.IntegerField(default=0)
+    createdAt = models.DateTimeField(auto_now_add=True)
+    updatedAt = models.DateTimeField(auto_now=True)
+
+
 class GstTypeModel(models.Model):
     id = models.AutoField(primary_key=True)
     gstTypeName = models.CharField(max_length=200, null=True, blank=True)
@@ -223,7 +231,6 @@ class AumEntryModel(models.Model):
                                      blank=True)
     aumAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="aumAmcName",
                                    null=True, blank=True)
-    aumInvoiceNumber = models.CharField(max_length=200, null=True, blank=True)
     aumAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     aumMonth = models.CharField(max_length=7, help_text="Format: YYYY-MM")
     hideStatus = models.IntegerField(default=0)
@@ -794,6 +801,12 @@ class DailyEntryModel(models.Model):
     dailyEntryIssueType = models.ForeignKey(IssueTypeModel, on_delete=models.CASCADE,
                                             related_name="dailyEntryIssueType",
                                             null=True, blank=True)
+    dailyEntryTranscationMode = models.ForeignKey(TranscationModeModel, on_delete=models.CASCADE,
+                                            related_name="dailyEntryTranscationMode",
+                                            null=True, blank=True)
+    dailyEntryFile = models.FileField(upload_to="dailyEntryFile/",
+                                   storage=UniqueFileStorage(), null=True, blank=True,
+                                   validators=[FileExtensionValidator(allowed_extensions=["pdf", "doc", "docx"])])
     dailyEntrySipDate = models.DateField(null=True, blank=True)
     dailyEntryStaffName = models.CharField(max_length=55, null=True, blank=True)
     dailyEntryTransactionAddDetails = models.CharField(max_length=2500, null=True, blank=True)

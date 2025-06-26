@@ -463,6 +463,56 @@ class FormTypeViewSet(viewsets.ModelViewSet):
         return Response(response)
 
 
+
+class TranscationModeViewSet(viewsets.ModelViewSet):
+    queryset = TranscationModeModel.objects.filter(hideStatus=0)
+    serializer_class = TranscationModeModelSerializers
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=True, methods=['GET'])
+    def listing(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            if pk == "0":
+                serializer = TranscationModeModelSerializers(TranscationModeModel.objects.filter(hideStatus=0).order_by('-id'),
+                                                      many=True)
+            else:
+                serializer = TranscationModeModelSerializers(
+                    TranscationModeModel.objects.filter(hideStatus=0, id=pk).order_by('-id'),
+                    many=True)
+            response = {'code': 1, 'data': serializer.data, 'message': "All  Retried"}
+        else:
+            response = {'code': 0, 'data': [], 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['POST'])
+    def processing(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            if pk == "0":
+                serializer = TranscationModeModelSerializers(data=request.data)
+            else:
+                serializer = TranscationModeModelSerializers(instance=TranscationModeModel.objects.get(id=pk), data=request.data)
+            if serializer.is_valid():
+                serializer.save()
+                response = {'code': 1, 'message': "Done Successfully"}
+            else:
+                response = {'code': 0, 'message': "Unable to Process Request"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+    @action(detail=True, methods=['GET'])
+    def deletion(self, request, pk=None):
+        user = request.user
+        if user.is_authenticated:
+            TranscationModeModel.objects.filter(id=pk).update(hideStatus=1)
+            response = {'code': 1, 'message': "Done Successfully"}
+        else:
+            response = {'code': 0, 'message': "Token is invalid"}
+        return Response(response)
+
+
 class GstTypeViewSet(viewsets.ModelViewSet):
     queryset = GstTypeModel.objects.filter(hideStatus=0)
     serializer_class = GstTypeModelSerializers
@@ -1349,7 +1399,6 @@ class AumEntryViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 Q(aumArnNumber__arnNumber__icontains=search) |
                 Q(aumAmcName__amcName__icontains=search) |
-                Q(aumInvoiceNumber__icontains=search) |
                 Q(aumAmount__icontains=search) |
                 Q(aumMonth__icontains=search)
             )
@@ -1384,7 +1433,6 @@ class AumEntryViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(
                 Q(aumArnNumber__arnNumber__icontains=search) |
                 Q(aumAmcName__amcName__icontains=search) |
-                Q(aumInvoiceNumber__icontains=search) |
                 Q(aumAmount__icontains=search) |
                 Q(aumMonth__icontains=search)
             )
@@ -4402,7 +4450,8 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
             'dailyEntryClientPanNumber',
             'dailyEntryClientMobileNumber',
             'dailyEntryFundName',
-            'dailyEntryIssueType'
+            'dailyEntryIssueType',
+            'dailyEntryTranscationMode'
         )
 
         if search:
@@ -4410,6 +4459,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                 Q(dailyEntryClientName__clientName__icontains=search) |
                 Q(dailyEntryFundName__fundName__icontains=search) |
                 Q(dailyEntryIssueType__issueTypeName__icontains=search) |
+                Q(dailyEntryTranscationMode__transcationModeName__icontains=search) |
                 Q(applicationDate__icontains=search)
             )
 
@@ -4444,6 +4494,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                 Q(dailyEntryClientName__clientName__icontains=search) |
                 Q(dailyEntryFundName__fundName__icontains=search) |
                 Q(dailyEntryIssueType__issueTypeName__icontains=search) |
+                Q(dailyEntryTranscationMode__transcationModeName__icontains=search) |
                 Q(applicationDate__icontains=search)
             )
 
@@ -4459,7 +4510,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                 serializer = DailyEntryModelSerializers(instance)
                 return Response({'code': 1, 'data': serializer.data, 'message': "Retrieved Successfully"})
             except DailyEntryModel.DoesNotExist:
-                return Response({'code': 0, 'message': "NAV not found"}, status=404)
+                return Response({'code': 0, 'message': "Entry not found"}, status=404)
         else:
             return Response({'code': 0, 'message': "Token is invalid"}, status=401)
 
@@ -4510,6 +4561,11 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
             fund_house = AmcEntryModel.objects.get(id=data['dailyEntryFundHouse'])
             fund_name = FundModel.objects.get(id=data['dailyEntryFundName'])
             issue_type = IssueTypeModel.objects.get(id=data['dailyEntryIssueType'])
+            
+            # Retrieve transaction mode
+            transaction_mode = None
+            if data.get('dailyEntryTranscationMode'):
+                transaction_mode = TranscationModeModel.objects.get(id=data['dailyEntryTranscationMode'])
 
             # Update daily entry fields
             issueDailyEntry.dailyEntryClientPanNumber = client
@@ -4519,8 +4575,7 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
 
             # Parse dates
             issueDailyEntry.applicationDate = datetime.strptime(data['applicationDate'], '%Y-%m-%d').date()
-            issueDailyEntry.dailyEntrySipDate = datetime.strptime(data['sipDate'], '%Y-%m-%d').date() if data[
-                'sipDate'] else None
+            issueDailyEntry.dailyEntrySipDate = datetime.strptime(data['sipDate'], '%Y-%m-%d').date() if data.get('sipDate') else None
 
             # Set other fields
             issueDailyEntry.dailyEntryFundHouse = fund_house
@@ -4529,8 +4584,13 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
             issueDailyEntry.dailyEntryAmount = data['amount']
             issueDailyEntry.dailyEntryClientChequeNumber = data.get('clientChequeNumber')
             issueDailyEntry.dailyEntryIssueType = issue_type
+            issueDailyEntry.dailyEntryTranscationMode = transaction_mode
             issueDailyEntry.dailyEntryStaffName = data['staffName']
             issueDailyEntry.dailyEntryTransactionAddDetails = data['transactionAddDetail']
+
+            # Handle file upload
+            if 'dailyEntryFile' in request.FILES:
+                issueDailyEntry.dailyEntryFile = request.FILES['dailyEntryFile']
 
             # Save daily entry
             issueDailyEntry.save()
@@ -4567,7 +4627,8 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                         'fund_name': issueDailyEntry.dailyEntryFundName.id,
                         'amount': str(issueDailyEntry.dailyEntryAmount),
                         'application_date': issueDailyEntry.applicationDate.isoformat(),
-                        'issue_type': issueDailyEntry.dailyEntryIssueType.id
+                        'issue_type': issueDailyEntry.dailyEntryIssueType.id,
+                        'transaction_mode': issueDailyEntry.dailyEntryTranscationMode.id if issueDailyEntry.dailyEntryTranscationMode else None
                     },
                     'issue_info': {
                         'resolution_date': issue_resolution_date.isoformat(),
