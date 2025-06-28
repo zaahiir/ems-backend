@@ -4715,3 +4715,4 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                 'code': 0,
                 'message': f"Error processing deletion: {str(e)}"
             }, status=500)
+        
