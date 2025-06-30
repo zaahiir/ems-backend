@@ -1452,6 +1452,33 @@ class AumEntryViewSet(viewsets.ModelViewSet):
                 return Response({'code': 0, 'message': "NAV not found"}, status=404)
         else:
             return Response({'code': 0, 'message': "Token is invalid"}, status=401)
+ 
+    @action(detail=False, methods=['GET'])
+    def check_duplicate(self, request):
+        """Check if AUM entry already exists for given ARN, AMC, and month"""
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        arn_number = request.query_params.get('arn_number')
+        amc_id = request.query_params.get('amc_id')
+        month = request.query_params.get('month')
+
+        if not all([arn_number, amc_id, month]):
+            return Response({'code': 0, 'message': "Missing required parameters"})
+
+        try:
+            # Check if entry already exists
+            exists = AumEntryModel.objects.filter(
+                aumArnNumber__id=arn_number,
+                aumAmcName__id=amc_id,
+                aumMonth=month,
+                hideStatus=0
+            ).exists()
+
+            return Response({'exists': exists})
+        except Exception as e:
+            return Response({'code': 0, 'message': str(e)}, status=500)
 
     @action(detail=True, methods=['POST'])
     def processing(self, request, pk=None):
@@ -1467,21 +1494,50 @@ class AumEntryViewSet(viewsets.ModelViewSet):
                     return Response({'code': 0, 'message': "Invalid aumMonth format. Use YYYY-MM."})
 
             if pk == "0":
-                # Create operation
+                # Create operation - check for duplicates first
+                arn_id = data.get('aumArnNumber')
+                amc_id = data.get('aumAmcName')
+                month = data.get('aumMonth')
+                
+                if all([arn_id, amc_id, month]):
+                    # Check for existing entry
+                    existing_entry = AumEntryModel.objects.filter(
+                        aumArnNumber__id=arn_id,
+                        aumAmcName__id=amc_id,
+                        aumMonth=month,
+                        hideStatus=0
+                    ).first()
+                    
+                    if existing_entry:
+                        return Response({
+                            'code': 0, 
+                            'message': f"AUM entry already exists for this ARN, AMC, and month"
+                        })
+
                 serializer = self.get_serializer(data=request.data)
                 if serializer.is_valid():
-                    instance = serializer.save()
-                    ActivityLogger.log_activity(
-                        request=request,
-                        action='CREATE',
-                        entity_type='AumEntry',
-                        entity_id=instance.id,
-                        details={'new_data': serializer.data}
-                    )
-                    response = {'code': 1, 'message': "Done Successfully"}
+                    try:
+                        instance = serializer.save()
+                        ActivityLogger.log_activity(
+                            request=request,
+                            action='CREATE',
+                            entity_type='AumEntry',
+                            entity_id=instance.id,
+                            details={'new_data': serializer.data}
+                        )
+                        response = {'code': 1, 'message': "Done Successfully"}
+                    except Exception as e:
+                        print(f"Error creating AUM entry: {e}")
+                        response = {'code': 0, 'message': f"Unable to create entry: {str(e)}"}
                 else:
                     print("Serializer errors:", serializer.errors)
-                    response = {'code': 0, 'message': "Unable to Process Request"}
+                    # Get detailed error message
+                    error_messages = []
+                    for field, errors in serializer.errors.items():
+                        for error in errors:
+                            error_messages.append(f"{field}: {error}")
+                    error_message = "; ".join(error_messages) if error_messages else "Validation failed"
+                    response = {'code': 0, 'message': f"Validation error: {error_message}"}
             else:
                 # Update operation
                 try:
@@ -1505,9 +1561,18 @@ class AumEntryViewSet(viewsets.ModelViewSet):
                         response = {'code': 1, 'message': "Done Successfully"}
                     else:
                         print("Serializer errors:", serializer.errors)
-                        response = {'code': 0, 'message': "Unable to Process Request"}
+                        # Get detailed error message
+                        error_messages = []
+                        for field, errors in serializer.errors.items():
+                            for error in errors:
+                                error_messages.append(f"{field}: {error}")
+                        error_message = "; ".join(error_messages) if error_messages else "Validation failed"
+                        response = {'code': 0, 'message': f"Validation error: {error_message}"}
                 except AumEntryModel.DoesNotExist:
                     response = {'code': 0, 'message': "AumEntry not found"}
+                except Exception as e:
+                    print(f"Error updating AUM entry: {e}")
+                    response = {'code': 0, 'message': f"Unable to update entry: {str(e)}"}
         else:
             response = {'code': 0, 'message': "Token is invalid"}
         return Response(response)
@@ -4541,10 +4606,12 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
 
             # Get previous data if updating
             previous_data = None
+            old_file_path = None  # Track old file for deletion
             if pk != "0":
                 try:
                     existing_entry = DailyEntryModel.objects.get(id=pk)
                     previous_data = self.get_previous_data(existing_entry)
+                    old_file_path = existing_entry.dailyEntryFile.path if existing_entry.dailyEntryFile else None
                 except DailyEntryModel.DoesNotExist:
                     return Response({'code': 0, 'message': "Daily entry not found"}, status=404)
 
@@ -4588,12 +4655,32 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
             issueDailyEntry.dailyEntryStaffName = data['staffName']
             issueDailyEntry.dailyEntryTransactionAddDetails = data['transactionAddDetail']
 
-            # Handle file upload
+            # Handle file operations
+            should_delete_old_file = False
+            
+            # Check if user wants to remove existing file
+            if data.get('removeExistingFile') == 'true' or data.get('removeExistingFile') is True:
+                should_delete_old_file = True
+                issueDailyEntry.dailyEntryFile = None  # Clear the file field
+            
+            # Handle new file upload
             if 'dailyEntryFile' in request.FILES:
+                should_delete_old_file = True  # Delete old file when new file is uploaded
                 issueDailyEntry.dailyEntryFile = request.FILES['dailyEntryFile']
 
-            # Save daily entry
+            # Save daily entry first
             issueDailyEntry.save()
+
+            # Delete old file from filesystem if needed
+            if should_delete_old_file and old_file_path:
+                try:
+                    import os
+                    if os.path.exists(old_file_path):
+                        os.remove(old_file_path)
+                        print(f"Deleted old file: {old_file_path}")
+                except Exception as e:
+                    print(f"Error deleting old file: {str(e)}")
+                    # Log the error but don't fail the transaction
 
             # Calculate issue resolution date
             issue_resolution_date = self.calculate_working_days(
@@ -4633,6 +4720,11 @@ class DailyEntryViewSet(viewsets.ModelViewSet):
                     'issue_info': {
                         'resolution_date': issue_resolution_date.isoformat(),
                         'description': issue.issueDescription
+                    },
+                    'file_operations': {
+                        'old_file_deleted': should_delete_old_file and old_file_path is not None,
+                        'new_file_uploaded': 'dailyEntryFile' in request.FILES,
+                        'file_removed': data.get('removeExistingFile') == 'true'
                     }
                 },
                 'transaction_type': action_type.lower()
