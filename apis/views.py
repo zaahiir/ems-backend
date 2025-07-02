@@ -2131,7 +2131,8 @@ class GstEntryViewSet(viewsets.ModelViewSet):
                 Q(gstTaxableValue__icontains=search) |
                 Q(gstIGst__icontains=search) |
                 Q(gstSGst__icontains=search) |
-                Q(gstCGst__icontains=search)
+                Q(gstCGst__icontains=search) |
+                Q(gstRegistered__icontains=search)
             )
 
         total_count = queryset.count()
@@ -2169,7 +2170,8 @@ class GstEntryViewSet(viewsets.ModelViewSet):
                 Q(gstTaxableValue__icontains=search) |
                 Q(gstIGst__icontains=search) |
                 Q(gstSGst__icontains=search) |
-                Q(gstCGst__icontains=search)
+                Q(gstCGst__icontains=search) |
+                Q(gstRegistered__icontains=search)
             )
 
         total_count = queryset.count()

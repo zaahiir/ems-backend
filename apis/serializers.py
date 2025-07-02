@@ -205,8 +205,10 @@ class IndustryAumEntryModelSerializers(serializers.ModelSerializer):
         return representation
 
 
+
 class GstEntryModelSerializers(serializers.ModelSerializer):
     gstAmcName = serializers.PrimaryKeyRelatedField(queryset=AmcEntryModel.objects.all())
+    gstArnNumber = serializers.PrimaryKeyRelatedField(queryset=ArnEntryModel.objects.all())
 
     class Meta:
         model = GstEntryModel
@@ -214,8 +216,8 @@ class GstEntryModelSerializers(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        representation[
-            'gstAmcName'] = instance.gstAmcName.amcName if instance.gstAmcName else None
+        representation['gstAmcName'] = instance.gstAmcName.amcName if instance.gstAmcName else None
+        representation['gstArnNumber'] = instance.gstArnNumber.arnNumber if instance.gstArnNumber else None
         return representation
 
 

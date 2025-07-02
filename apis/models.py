@@ -280,11 +280,14 @@ class GstEntryModel(models.Model):
     gstInvoiceNumber = models.CharField(max_length=200, null=True, blank=True)
     gstAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="gstAmcName",
                                    null=True, blank=True)
+    gstArnNumber = models.ForeignKey(ArnEntryModel, on_delete=models.CASCADE, related_name="gstArnNumber",
+                                            null=True, blank=True)
     gstTotalValue = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     gstTaxableValue = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     gstIGst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     gstSGst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     gstCGst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    gstRegistered = models.BooleanField(default=True) 
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
     updatedAt = models.DateTimeField(auto_now=True)
