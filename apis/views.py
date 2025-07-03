@@ -2109,6 +2109,54 @@ class GstEntryViewSet(viewsets.ModelViewSet):
         return self.get_serializer(instance).data
 
     @action(detail=False, methods=['GET'])
+    def check_duplicate(self, request):
+        """
+        Check if a GST entry already exists with the same ARN, AMC, Invoice Number, and Invoice Date
+        """
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # Get parameters from request
+        arn_number = request.query_params.get('arn_number')
+        amc_id = request.query_params.get('amc_id')
+        invoice_number = request.query_params.get('invoice_number')
+        invoice_date = request.query_params.get('invoice_date')
+
+        # Validate required parameters
+        if not all([arn_number, amc_id, invoice_number, invoice_date]):
+            return Response({
+                'exists': False,
+                'code': 0,
+                'message': "Missing required parameters: arn_number, amc_id, invoice_number, invoice_date"
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Check if a record exists with the same combination
+            duplicate_exists = GstEntryModel.objects.filter(
+                gstArnNumber_id=arn_number,
+                gstAmcName_id=amc_id,
+                gstInvoiceNumber=invoice_number,
+                gstInvoiceDate=invoice_date,
+                hideStatus=0  # Only check active records
+            ).exists()
+
+            response_data = {
+                'exists': duplicate_exists,
+                'code': 1,
+                'message': "Duplicate found" if duplicate_exists else "No duplicate found"
+            }
+
+            return Response(response_data, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response({
+                'exists': False,
+                'code': 0,
+                'message': f"Error checking duplicate: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=False, methods=['GET'])
     def listing(self, request):
         user = request.user
         if not user.is_authenticated:
