@@ -231,7 +231,7 @@ class AumEntryModel(models.Model):
                                      blank=True)
     aumAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="aumAmcName",
                                    null=True, blank=True)
-    aumAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    aumAmount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
     aumMonth = models.CharField(max_length=7, help_text="Format: YYYY-MM")
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
@@ -244,7 +244,7 @@ class CommissionEntryModel(models.Model):
                                             null=True, blank=True)
     commissionAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE,
                                           related_name="commissionAmcName", null=True, blank=True)
-    commissionAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    commissionAmount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
     commissionMonth = models.CharField(max_length=7, help_text="Format: YYYY-MM")
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
@@ -255,7 +255,7 @@ class AumYoyGrowthEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
     aumYoyGrowthAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE,
                                             related_name="aumYoyGrowthAmcName", null=True, blank=True)
-    aumYoyGrowthAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    aumYoyGrowthAmount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
     aumYoyGrowthDate = models.DateField(null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
@@ -266,7 +266,7 @@ class IndustryAumEntryModel(models.Model):
     id = models.AutoField(primary_key=True)
     industryName = models.CharField(max_length=200, null=True, blank=True)
     industryAumDate = models.DateField(null=True, blank=True)
-    industryAumAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    industryAumAmount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
     industryAumMode = models.ForeignKey(ModeModel, on_delete=models.CASCADE,
                                         related_name="industryAumMode", null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
@@ -282,11 +282,11 @@ class GstEntryModel(models.Model):
                                    null=True, blank=True)
     gstArnNumber = models.ForeignKey(ArnEntryModel, on_delete=models.CASCADE, related_name="gstArnNumber",
                                             null=True, blank=True)
-    gstTotalValue = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    gstTaxableValue = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    gstIGst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    gstSGst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    gstCGst = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    gstTotalValue = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    gstTaxableValue = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    gstIGst = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    gstSGst = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    gstCGst = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
     gstRegistered = models.BooleanField(default=True) 
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
@@ -320,11 +320,11 @@ class StatementModel(models.Model):
     statementAmcName = models.ForeignKey(AmcEntryModel, on_delete=models.CASCADE, related_name="statementAmcName",
                                          null=True, blank=True)
     statementFundName = models.CharField(max_length=200, null=True, blank=True)
-    statementCostOfInvestment = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    statementCurrentValue = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    statementCostOfInvestment = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    statementCurrentValue = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
     statementSipDate = models.DateField(null=True, blank=True)
-    statementSipAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    statementSwpAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    statementSipAmount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
+    statementSwpAmount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
     statementSipBankName = models.CharField(max_length=200, null=True, blank=True)
     statementSipBankAccountType = models.CharField(max_length=200, null=True, blank=True)
     statementSipBankAccountLastFourDigit = models.IntegerField(null=True, blank=True)
@@ -440,7 +440,7 @@ class ClientModel(models.Model):
     clientCitizenship = models.CharField(max_length=500, null=True, blank=True)
     clientResidentialStatus = models.CharField(max_length=500, null=True, blank=True)
     clientOccupation = models.CharField(max_length=500, null=True, blank=True)
-    clientAnnualIncome = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    clientAnnualIncome = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
     clientPoliticallyExposed = models.ForeignKey(PoliticallyExposedPersonModel, on_delete=models.CASCADE,
                                                  related_name="clientPoliticallyExposed", null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
@@ -587,7 +587,7 @@ class ClientInsuranceModel(models.Model):
     clientInsurancePolicyName = models.CharField(max_length=500, null=True, blank=True)
     clientInsurancePolicyCompanyName = models.CharField(max_length=500, null=True, blank=True)
     clientInsurancePolicyTerm = models.CharField(max_length=500, null=True, blank=True)
-    clientInsurancePolicyMaturityAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    clientInsurancePolicyMaturityAmount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
     clientInsurancePolicyPaymentPerInstallment = models.CharField(max_length=500, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
     createdAt = models.DateTimeField(auto_now_add=True)
@@ -602,7 +602,7 @@ class ClientMedicalInsuranceModel(models.Model):
     clientMedicalInsurancePolicyName = models.CharField(max_length=500, null=True, blank=True)
     clientMedicalInsurancePolicyCompanyName = models.CharField(max_length=500, null=True, blank=True)
     clientMedicalInsurancePolicyTerm = models.CharField(max_length=500, null=True, blank=True)
-    clientMedicalInsurancePolicyMaturityAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True,
+    clientMedicalInsurancePolicyMaturityAmount = models.DecimalField(max_digits=20, decimal_places=2, null=True,
                                                                      blank=True)
     clientMedicalInsurancePolicyPaymentPerInstallment = models.CharField(max_length=500, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
@@ -618,7 +618,7 @@ class ClientTermInsuranceModel(models.Model):
     clientTermInsurancePolicyName = models.CharField(max_length=500, null=True, blank=True)
     clientTermInsurancePolicyCompanyName = models.CharField(max_length=500, null=True, blank=True)
     clientTermInsurancePolicyTerm = models.CharField(max_length=500, null=True, blank=True)
-    clientTermInsurancePolicyMaturityAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True,
+    clientTermInsurancePolicyMaturityAmount = models.DecimalField(max_digits=20, decimal_places=2, null=True,
                                                                   blank=True)
     clientTermInsurancePolicyPaymentPerInstallment = models.CharField(max_length=500, null=True, blank=True)
     hideStatus = models.IntegerField(default=0)
@@ -799,7 +799,7 @@ class DailyEntryModel(models.Model):
                                             null=True, blank=True)
     dailyEntryFundName = models.ForeignKey(FundModel, on_delete=models.CASCADE, related_name="dailyEntryFundName",
                                            null=True, blank=True)
-    dailyEntryAmount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    dailyEntryAmount = models.DecimalField(max_digits=20, decimal_places=2, null=True, blank=True)
     dailyEntryClientChequeNumber = models.CharField(max_length=55, null=True, blank=True)
     dailyEntryIssueType = models.ForeignKey(IssueTypeModel, on_delete=models.CASCADE,
                                             related_name="dailyEntryIssueType",
