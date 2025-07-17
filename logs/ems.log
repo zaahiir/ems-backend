@@ -1,0 +1,2 @@
+INFO 2025-07-15 13:24:54,342 autoreload 7460 27184 Watching for file changes with StatReloader
+INFO 2025-07-15 13:29:56,122 autoreload 7460 27184 F:\Github\ems-backend\ems\settings.py changed, reloading.
