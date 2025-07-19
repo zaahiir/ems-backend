@@ -4216,6 +4216,9 @@ class NavViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['GET'])
     def listing(self, request):
+        """
+        Enhanced listing using PostgreSQL function for better performance
+        """
         user = request.user
         if not user.is_authenticated:
             return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
@@ -4224,51 +4227,158 @@ class NavViewSet(viewsets.ModelViewSet):
         search = request.query_params.get('search', '')
         cursor = request.query_params.get('cursor')
 
-        queryset = self.get_queryset().select_related('navFundName', 'navFundName__fundAmcName')
+        try:
+            # Use PostgreSQL function for search
+            cursor_id = int(cursor) if cursor else None
+           
+            with connection.cursor() as db_cursor:
+                db_cursor.execute("""
+                    SELECT * FROM search_nav_data(%s, %s, %s, %s)
+                """, [search, page_size, cursor_id, 0])
+               
+                results = db_cursor.fetchall()
 
-        if search:
-            queryset = queryset.filter(
-                Q(navFundName__fundAmcName__amcName__icontains=search) |
-                Q(navFundName__fundName__icontains=search) |
-                Q(nav__icontains=search)
-            )
+            if not results:
+                return Response({
+                    'code': 1,
+                    'data': [],
+                    'message': "Retrieved Successfully",
+                    'next_cursor': None,
+                    'total_count': 0
+                })
 
-        if cursor:
-            queryset = queryset.filter(id__lte=int(cursor))
+            # Process results - Updated column mapping
+            nav_data = []
+            total_count = results[0][10] if results else 0  # total_count is at index 10
+           
+            for row in results:
+                nav_item = {
+                    'id': row[0],
+                    'nav': row[1],
+                    'navDate': row[2],
+                    'createdAt': row[3],
+                    'updatedAt': row[4],
+                    'navFundName': row[5],  # fund_name from function
+                    'amcName': row[7],      # amc_name from function  
+                    'fundId': row[6],       # fund_id from function
+                    'amcId': row[8],        # amc_id from function
+                    'schemeCode': row[9],   # scheme_code from function
+                    'hideStatus': 0
+                }
+                nav_data.append(nav_item)
 
-        queryset = queryset.order_by('-id')[:page_size + 1]
+            # Determine next cursor
+            next_cursor = None
+            if len(nav_data) > page_size:
+                next_cursor = nav_data[-1]['id']
+                nav_data = nav_data[:-1]  # Remove the extra item
 
-        results = list(queryset)
-        next_cursor = None
-        if len(results) > page_size:
-            next_cursor = results[-1].id
-            results = results[:-1]
+            return Response({
+                'code': 1,
+                'data': nav_data,
+                'message': "Retrieved Successfully",
+                'next_cursor': str(next_cursor) if next_cursor else None,
+                'total_count': total_count
+            })
 
-        serializer = self.get_serializer(results, many=True)
-
-        data = {
-            'code': 1,
-            'data': serializer.data,
-            'message': "Retrieved Successfully",
-            'next_cursor': str(next_cursor) if next_cursor else None
-        }
-
-        return Response(data)
+        except Exception as e:
+            logger.error(f"Error in listing: {str(e)}")
+            # Fallback to ORM method if PostgreSQL function fails
+            return self.listing_fallback(request)
 
     @action(detail=False, methods=['GET'])
     def total_count(self, request):
+        """
+        Get total count using PostgreSQL function
+        """
         search = request.query_params.get('search', '')
-        queryset = self.get_queryset()
+       
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT get_nav_search_count(%s, %s)", [search, 0])
+                total_count = cursor.fetchone()[0]
+               
+            return Response({'total_count': total_count})
+           
+        except Exception as e:
+            logger.error(f"Error in total_count: {str(e)}")
+            # Fallback to ORM count
+            try:
+                queryset = self.get_queryset().select_related('navFundName', 'navFundName__fundAmcName')
+                if search:
+                    queryset = queryset.filter(
+                        Q(navFundName__fundAmcName__amcName__icontains=search) |
+                        Q(navFundName__fundName__icontains=search) |
+                        Q(nav__icontains=search)
+                    )
+                count = queryset.count()
+                return Response({'total_count': count})
+            except Exception as fallback_error:
+                logger.error(f"Fallback count also failed: {str(fallback_error)}")
+                return Response({
+                    'code': 0,
+                    'message': f"Error retrieving count: {str(fallback_error)}"
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        if search:
-            queryset = queryset.filter(
+    @action(detail=False, methods=['GET'])
+    def listing_fallback(self, request):
+        """
+        Fallback method using Django ORM (keep for emergency use)
+        """
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'code': 0, 'message': "Token is invalid"}, status=status.HTTP_401_UNAUTHORIZED)
+
+        page_size = int(request.query_params.get('page_size', 100))
+        search = request.query_params.get('search', '')
+        cursor = request.query_params.get('cursor')
+
+        try:
+            queryset = self.get_queryset().select_related('navFundName', 'navFundName__fundAmcName')
+
+            if search:
+                queryset = queryset.filter(
+                    Q(navFundName__fundAmcName__amcName__icontains=search) |
+                    Q(navFundName__fundName__icontains=search) |
+                    Q(nav__icontains=search)
+                )
+
+            if cursor:
+                queryset = queryset.filter(id__lte=int(cursor))
+
+            queryset = queryset.order_by('-id')[:page_size + 1]
+
+            results = list(queryset)
+            next_cursor = None
+            if len(results) > page_size:
+                next_cursor = results[-1].id
+                results = results[:-1]
+
+            # Get total count for fallback
+            total_count = self.get_queryset().filter(
                 Q(navFundName__fundAmcName__amcName__icontains=search) |
                 Q(navFundName__fundName__icontains=search) |
                 Q(nav__icontains=search)
-            )
+            ).count() if search else self.get_queryset().count()
 
-        total_count = queryset.count()
-        return Response({'total_count': total_count})
+            serializer = self.get_serializer(results, many=True)
+
+            data = {
+                'code': 1,
+                'data': serializer.data,
+                'message': "Retrieved Successfully (Fallback)",
+                'next_cursor': str(next_cursor) if next_cursor else None,
+                'total_count': total_count
+            }
+
+            return Response(data)
+
+        except Exception as e:
+            logger.error(f"Error in listing_fallback: {str(e)}")
+            return Response({
+                'code': 0,
+                'message': f"Error retrieving data: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['GET'])
     def list_for_update(self, request, pk=None):
@@ -4323,7 +4433,7 @@ class NavViewSet(viewsets.ModelViewSet):
             else:
                 # Update existing NAV entry
                 nav_entry = NavModel.objects.get(id=pk)
-                previous_data = self.get_previous_data(nav_entry)  # Capture previous data
+                previous_data = self.get_previous_data(nav_entry)
                 nav_entry.navFundName = fund
                 nav_entry.nav = nav
                 nav_entry.navDate = nav_date
@@ -4344,6 +4454,7 @@ class NavViewSet(viewsets.ModelViewSet):
         except (AmcEntryModel.DoesNotExist, FundModel.DoesNotExist, NavModel.DoesNotExist) as e:
             return Response({'code': 0, 'message': str(e)}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
+            logger.error(f"Error in processing: {str(e)}")
             return Response({'code': 0, 'message': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['GET'])
@@ -4352,7 +4463,6 @@ class NavViewSet(viewsets.ModelViewSet):
         if user.is_authenticated:
             try:
                 nav_entry = NavModel.objects.get(id=pk)
-                # Capture previous data before deletion
                 previous_data = self.get_previous_data(nav_entry)
 
                 # Log the deletion with the captured data
@@ -4401,6 +4511,7 @@ class NavViewSet(viewsets.ModelViewSet):
                     'message': message
                 }, status=status.HTTP_200_OK)
             except Exception as e:
+                logger.error(f"Error in fetch: {str(e)}")
                 return Response({
                     'code': 0,
                     'message': f"Error fetching NAV data: {str(e)}"
@@ -4421,7 +4532,7 @@ class NavViewSet(viewsets.ModelViewSet):
             if result:
                 data = {
                     'navId': result[0],
-                    'nav': float(result[1]),
+                    'nav': result[1],  # Now returns as string directly from VARCHAR field
                     'navDate': result[2].isoformat(),
                     'fundId': result[3],
                     'fundName': result[4],
@@ -4433,8 +4544,27 @@ class NavViewSet(viewsets.ModelViewSet):
             else:
                 return Response({'code': 0, 'message': 'NAV data not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            return Response({'code': 0, 'message': f'Error retrieving NAV update data: {str(e)}'},
-                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error(f"Error in get_nav_update_data: {str(e)}")
+            # Fallback to ORM
+            try:
+                instance = NavModel.objects.select_related('navFundName', 'navFundName__fundAmcName').get(id=pk)
+                data = {
+                    'navId': instance.id,
+                    'nav': instance.nav,  # Keep as string since it's CharField
+                    'navDate': instance.navDate.isoformat(),
+                    'fundId': instance.navFundName.id,
+                    'fundName': instance.navFundName.fundName,
+                    'schemeCode': instance.navFundName.schemeCode,
+                    'amcId': instance.navFundName.fundAmcName.id,
+                    'amcName': instance.navFundName.fundAmcName.amcName
+                }
+                return Response({'code': 1, 'data': data, 'message': 'NAV update data retrieved successfully (Fallback)'})
+            except NavModel.DoesNotExist:
+                return Response({'code': 0, 'message': 'NAV data not found'}, status=status.HTTP_404_NOT_FOUND)
+            except Exception as fallback_error:
+                logger.error(f"Fallback also failed: {str(fallback_error)}")
+                return Response({'code': 0, 'message': f'Error retrieving NAV update data: {str(fallback_error)}'},
+                                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=False, methods=['GET'])
     def funds_by_amc(self, request):
@@ -4446,6 +4576,7 @@ class NavViewSet(viewsets.ModelViewSet):
             funds = FundModel.objects.filter(fundAmcName_id=amc_id, hideStatus=0).values('id', 'fundName')
             return Response({'code': 1, 'data': list(funds), 'message': 'Funds retrieved successfully'})
         except Exception as e:
+            logger.error(f"Error in funds_by_amc: {str(e)}")
             return Response({'code': 0, 'message': f'Error retrieving funds: {str(e)}'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
