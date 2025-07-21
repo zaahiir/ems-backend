@@ -1965,7 +1965,8 @@ class IndustryAumEntryViewSet(viewsets.ModelViewSet):
                 Q(industryAumMode__modeName__icontains=search) |
                 Q(industryName__icontains=search) |
                 Q(industryAumDate__icontains=search) |
-                Q(industryAumMode__icontains=search)
+                Q(industryAumAmount__icontains=search)
+                # Removed the problematic Q(industryAumMode__icontains=search) line
             )
 
         total_count = queryset.count()
@@ -1999,7 +2000,8 @@ class IndustryAumEntryViewSet(viewsets.ModelViewSet):
                 Q(industryName__icontains=search) |
                 Q(industryAumDate__icontains=search) |
                 Q(industryAumAmount__icontains=search) |
-                Q(industryAumMode__icontains=search)
+                Q(industryAumMode__modeName__icontains=search)
+                # Fixed this line as well - changed from industryAumMode__icontains to industryAumMode__modeName__icontains
             )
 
         total_count = queryset.count()
