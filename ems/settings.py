@@ -10,17 +10,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-05k%mpd+p8b!wb$-w4^hj0qkmm^tn+@*i9$0tl11sdmsq@nn3)')
 
-# Environment: 'development' (default) or 'production'
-DJANGO_ENV = os.getenv('DJANGO_ENV', 'development').lower()
-IS_PRODUCTION = DJANGO_ENV == 'production'
+
+# Default to 'production' on the server; override with DJANGO_ENVIRONMENT=development locally
+# ENVIRONMENT = os.getenv('DJANGO_ENVIRONMENT', 'production')  # 'development' or 'production'
+ENVIRONMENT = os.getenv('DJANGO_ENVIRONMENT', 'development')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = not IS_PRODUCTION
+DEBUG = ENVIRONMENT == 'development'
+
+# Define IS_PRODUCTION for consistent use throughout the file
+IS_PRODUCTION = ENVIRONMENT == 'production'
 
 ALLOWED_HOSTS = (
     ['66.179.189.41', 'backend.faiop.com', 'faiop.com', 'www.faiop.com']
     if IS_PRODUCTION
-    else ['*']
+    else ['localhost', '127.0.0.1']
 )
 
 CORS_ALLOW_CREDENTIALS = True
@@ -205,8 +209,18 @@ MIME_TYPES = {
 }
 
 # Celery settings
-CELERY_BROKER_URL = 'redis://localhost:6379/0'
-CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
+CELERY_BROKER_URL = (
+    'redis://backend.faiop.com:6379/0'
+    if IS_PRODUCTION
+    else 'redis://localhost:6379/0'
+)
+
+CELERY_RESULT_BACKEND = (
+    'redis://backend.faiop.com:6379/1'
+    if IS_PRODUCTION
+    else 'redis://localhost:6379/1'
+)
+
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
@@ -229,6 +243,11 @@ CELERY_QUEUES = {
 
 
 # For Celery result backend (optional)
-CELERY_RESULT_BACKEND = 'redis://localhost:6379/1'
+CELERY_RESULT_BACKEND = (
+    'redis://backend.faiop.com:6379/1'
+    if IS_PRODUCTION
+    else 'redis://localhost:6379/1'
+)
+
 CELERY_CACHE_BACKEND = 'django-cache'
 
