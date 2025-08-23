@@ -10,15 +10,50 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-05k%mpd+p8b!wb$-w4^hj0qkmm^tn+@*i9$0tl11sdmsq@nn3)')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+# Environment: 'development' (default) or 'production'
+DJANGO_ENV = os.getenv('DJANGO_ENV', 'development').lower()
+IS_PRODUCTION = DJANGO_ENV == 'production'
 
-ALLOWED_HOSTS = ['*']
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = not IS_PRODUCTION
+
+ALLOWED_HOSTS = (
+    ['66.179.189.41', 'backend.faiop.com', 'faiop.com', 'www.faiop.com']
+    if IS_PRODUCTION
+    else ['*']
+)
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:4200',  # Replace with your frontend URL
+
+# CORS/CSRF configuration per environment
+DEV_CORS_ALLOWED_ORIGINS = [
+    'http://localhost:4200',
+    'http://localhost:3000',
+    'http://127.0.0.1:4200',
 ]
+PROD_CORS_ALLOWED_ORIGINS = [
+    'https://faiop.com',
+    'https://www.faiop.com',
+    'https://backend.faiop.com',
+]
+
+CORS_ALLOWED_ORIGINS = (
+    PROD_CORS_ALLOWED_ORIGINS if IS_PRODUCTION else DEV_CORS_ALLOWED_ORIGINS
+)
+
+CSRF_TRUSTED_ORIGINS = (
+    [
+        'https://faiop.com',
+        'https://www.faiop.com',
+        'https://backend.faiop.com',
+    ]
+    if IS_PRODUCTION
+    else [
+        'http://localhost:4200',
+        'http://localhost:3000',
+        'http://127.0.0.1:4200',
+    ]
+)
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -68,16 +103,32 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ems.wsgi.application'
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'ems',
-        'USER': 'xoft',
-        'PASSWORD': '$martXoft@14',
-        'HOST': 'localhost',
-        'PORT': '5432',
+DATABASES = (
+    # Development DB (existing settings in this file)
+    {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'ems',
+            'USER': 'xoft',
+            'PASSWORD': '$martXoft@14',
+            'HOST': 'localhost',
+            'PORT': '5432',
+        }
     }
-}
+    if not IS_PRODUCTION
+    else
+    # Production DB (as provided)
+    {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': 'admin_test',
+            'USER': 'mfs',
+            'PASSWORD': '9Q39v5!dc',
+            'HOST': 'backend.faiop.com',
+            'PORT': '5432',
+        }
+    }
+)
 
 
 
@@ -133,10 +184,18 @@ USE_TZ = True
 USE_L10N = True
 
 STATIC_URL = '/static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
+STATIC_ROOT = (
+    '/var/www/vhosts/faiop.com/httpdocs/django/site/public/static'
+    if IS_PRODUCTION
+    else os.path.join(BASE_DIR, 'static/')
+)
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
+MEDIA_ROOT = (
+    '/var/www/vhosts/faiop.com/httpdocs/django/site/public/media'
+    if IS_PRODUCTION
+    else os.path.join(BASE_DIR, 'media/')
+)
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
